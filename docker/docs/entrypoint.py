@@ -6,17 +6,26 @@ generator, doesn't support that. Instead, we bake a placeholder into the static 
 
 import functools
 import http.server
+import logging
 import os
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
 
-def main() -> None:
+
+def main(
+    substitution_placeholder: str,
+    site_url: str,
+) -> None:
     docs_site = Path(__file__).parents[2] / "docs-site"
+    logger.debug(f"{substitution_placeholder=}")
+    logger.debug(f"{site_url=}")
+    logger.debug(f"{docs_site=}")
     if not docs_site.is_dir():
         raise RuntimeError(f"Docs site directory {docs_site} does not exist")
     substitute_site_url(
-        placeholder="https://__SITE_URL_PLACEHOLDER__",
-        site_url=os.environ.get("MKDOCS_SITE_URL", "http://localhost/"),
+        placeholder=substitution_placeholder,
+        site_url=site_url,
         docs_site=docs_site,
     )
     handler = functools.partial(
@@ -40,8 +49,15 @@ def substitute_site_url(*, placeholder: str, site_url: str, docs_site: Path) -> 
             continue
         if placeholder not in content:
             continue
+
         path.write_text(content.replace(placeholder, site_url), encoding="utf-8")
+        logger.debug(f"re-wrote path {str(path)!r}")
 
 
 if __name__ == "__main__":
-    main()
+    is_debug = True if os.getenv("DOCS_DEBUG", "false").lower() == "true" else False
+    logging.basicConfig(level=logging.DEBUG if is_debug else logging.WARNING)
+    main(
+        substitution_placeholder="https://__SITE_URL_PLACEHOLDER__",
+        site_url=os.environ.get("MKDOCS_SITE_URL", "http://localhost/"),
+    )

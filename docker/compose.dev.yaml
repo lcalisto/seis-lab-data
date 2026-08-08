@@ -336,6 +336,8 @@ services:
     image: *common-image
     entrypoint: ["uv", "run", "mkdocs"]
     command: ["serve", "--dev-addr=0.0.0.0:8000"]
+    environment:
+      DOCS_DEBUG: "true"
     volumes:
       - type: bind
         source: ../mkdocs.yml

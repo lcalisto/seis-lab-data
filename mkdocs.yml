@@ -1,5 +1,5 @@
 site_name: seis-lab-data docs
-site_url: !ENV [MKDOCS_SITE_URL, 'https://__SITE_URL__PLACEHOLDER__']
+site_url: !ENV [MKDOCS_SITE_URL, 'https://__SITE_URL_PLACEHOLDER__']
 repo_url: https://github.com/naturalgis/seis-lab-data
 site_author: Equipa NaturalGIS
 

@@ -3,16 +3,7 @@ name: Continuous Integration
 on:
   # will run both when pushing a branch and when pushing a tag
   push:
-    paths-ignore:
-      - 'docs/**'
-      - 'mkdocs/**'
-      - 'mkdocs.yml'
-
   pull_request:
-    paths-ignore:
-      - 'docs/**'
-      - 'mkdocs/**'
-      - 'mkdocs.yml'
 
 env:
   COLUMNS: 120

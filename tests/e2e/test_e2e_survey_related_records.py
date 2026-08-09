@@ -114,7 +114,7 @@ def test_survey_related_record_lifecycle(authenticated_page: Page):
     ).fill("Este é um recurso de test usado em testes e2e")
     authenticated_page.get_by_role(
         "textbox", name="field-asset-assets-0-relative_path"
-    ).fill("/asset/relative/path")
+    ).fill("/asset/relative/path.tif")
     authenticated_page.get_by_role("button", name="asset-0-add-another-link").click()
     authenticated_page.get_by_role(
         "textbox", name="field-asset-0-link-assets-0-links-0-url"
@@ -147,7 +147,7 @@ def test_survey_related_record_lifecycle(authenticated_page: Page):
     ).fill("Este é um segundo recurso de test usado em testes e2e")
     authenticated_page.get_by_role(
         "textbox", name="field-asset-assets-1-relative_path"
-    ).fill("/asset/relative/path")
+    ).fill("/asset/relative/second-path.tif")
     authenticated_page.get_by_role("button", name="asset-1-add-another-link").click()
     authenticated_page.get_by_role(
         "textbox", name="field-asset-1-link-assets-1-links-0-url"

@@ -406,7 +406,7 @@ async def _discover_mission_records(
                             metadata.temporal_extent_end if metadata else None
                         ),
                         assets=[
-                            record_schemas.RecordAssetCreate(
+                            record_schemas.DataRecordAssetCreate(
                                 id=identifiers.RecordAssetId(uuid.uuid4()),
                                 name=common.LocalizableDraftName(en=found_path.stem),
                                 description=common.LocalizableDraftDescription(en=""),

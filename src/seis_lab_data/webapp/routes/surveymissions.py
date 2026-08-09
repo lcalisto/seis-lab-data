@@ -854,7 +854,7 @@ class SurveyMissionDetailEndpoint(HTTPEndpoint):
                 for lf in form_instance.links.entries
             ],
             assets=[
-                record_schemas.RecordAssetCreate(
+                record_schemas.DataRecordAssetCreate(
                     id=identifiers.RecordAssetId(uuid.uuid4()),
                     name=common_schemas.LocalizableDraftName(
                         en=af.asset_name.en.data,

@@ -121,7 +121,7 @@ async def test_media_type_queries_ignore_derived_assets(
 
         media_types = await asset_queries.list_media_types(session)
         assert "image/webp" not in media_types
-        # the sample assets have extensionless paths
+        # the media type the sample assets declare
         assert "application/octet-stream" in media_types
         assert await asset_queries.count_media_types(session) == len(media_types)
 

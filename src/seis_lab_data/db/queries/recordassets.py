@@ -60,15 +60,25 @@ async def get_record_asset(
     return (await session.exec(statement)).first()
 
 
+async def get_record_asset_by_english_name(
+    session: AsyncSession,
+    survey_related_record_id: identifiers.SurveyRelatedRecordId,
+    english_name: str,
+) -> models.RecordAsset | None:
+    statement = (
+        select(models.RecordAsset)
+        .where(models.RecordAsset.name["en"].astext == english_name)
+        .where(models.RecordAsset.survey_related_record_id == survey_related_record_id)
+        .options(_SELECT_IN_LOAD_OPTIONS)
+    )
+    return (await session.exec(statement)).first()
+
+
 async def get_record_asset_by_file_path(
     session: AsyncSession,
-    file_path: str | None,
+    file_path: str,
     survey_mission_id: identifiers.SurveyMissionId,
 ) -> models.RecordAsset | None:
-    if file_path is None:
-        # derived assets have no file, so they are exempt from the per-mission
-        # path uniqueness rule - and a NULL comparison would match all of them
-        return None
     # Scoped per mission: the same relative path may legitimately exist in
     # several missions, each deserving its own record.
     statement = (
@@ -87,15 +97,15 @@ async def get_record_asset_by_file_path(
 
 def _get_media_type_list_statement(
     name_filter: str | None = None,
+    only_data_assets: bool = True,
 ):
     statement = (
         select(models.RecordAsset.media_type)
         .distinct()
-        # derived assets are an implementation detail - they must not show up
-        # among the media types offered to users
-        .where(models.RecordAsset.asset_type.any(AssetType.DATA))
         .order_by(models.RecordAsset.media_type)
     )
+    if only_data_assets:
+        statement = statement.where(models.RecordAsset.asset_type.any(AssetType.DATA))
     if name_filter:
         statement = statement.where(
             models.RecordAsset.media_type.ilike(f"%{name_filter}%")
@@ -108,8 +118,9 @@ async def list_media_types(
     page: int = 1,
     page_size: int = 20,
     name_filter: str | None = None,
+    only_data_assets: bool = True,
 ) -> list[str]:
-    statement = _get_media_type_list_statement(name_filter)
+    statement = _get_media_type_list_statement(name_filter, only_data_assets)
     limit = page_size
     offset = page_size * (page - 1)
     statement = statement.offset(offset).limit(limit)
@@ -123,6 +134,7 @@ async def list_media_types(
 async def count_media_types(
     session: AsyncSession,
     name_filter: str | None = None,
+    only_data_assets: bool = True,
 ) -> int:
-    statement = _get_media_type_list_statement(name_filter)
+    statement = _get_media_type_list_statement(name_filter, only_data_assets)
     return (await session.exec(select(func.count()).select_from(statement))).first()

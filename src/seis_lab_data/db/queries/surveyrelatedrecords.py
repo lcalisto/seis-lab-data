@@ -38,6 +38,7 @@ def _apply_survey_related_record_filters(
     record_ids: list[identifiers.SurveyRelatedRecordId] | None = None,
     dataset_category_id: identifiers.DatasetCategoryId | None = None,
     workflow_stage_id: identifiers.WorkflowStageId | None = None,
+    only_data_assets: bool = True,
 ):
     """Apply the common survey-related record search filters to a statement.
 
@@ -116,21 +117,19 @@ def _apply_survey_related_record_filters(
             )
         )
     if asset_media_type_filter is not None:
-        statement = statement.where(
-            exists(
-                select(models.RecordAsset)
-                .where(
-                    models.RecordAsset.survey_related_record_id
-                    == models.SurveyRelatedRecord.id
-                )
-                .where(
-                    models.RecordAsset.media_type.ilike(f"%{asset_media_type_filter}%")
-                )
-                # derived assets carry their own media type, which users never
-                # search for
-                .where(models.RecordAsset.asset_type.any(AssetType.DATA))
+        asset_statement = (
+            select(models.RecordAsset)
+            .where(
+                models.RecordAsset.survey_related_record_id
+                == models.SurveyRelatedRecord.id
             )
+            .where(models.RecordAsset.media_type.ilike(f"%{asset_media_type_filter}%"))
         )
+        if only_data_assets:
+            asset_statement = asset_statement.where(
+                models.RecordAsset.asset_type.any(AssetType.DATA)
+            )
+        statement = statement.where(exists(asset_statement))
     return statement
 
 
@@ -146,6 +145,7 @@ def _build_survey_related_record_statement(
     record_ids: list[identifiers.SurveyRelatedRecordId] | None = None,
     dataset_category_id: identifiers.DatasetCategoryId | None = None,
     workflow_stage_id: identifiers.WorkflowStageId | None = None,
+    only_data_assets: bool = True,
 ):
     statement = (
         select(models.SurveyRelatedRecord)
@@ -175,6 +175,7 @@ def _build_survey_related_record_statement(
         record_ids=record_ids,
         dataset_category_id=dataset_category_id,
         workflow_stage_id=workflow_stage_id,
+        only_data_assets=only_data_assets,
     )
     return statement.order_by(
         models.SurveyRelatedRecord.temporal_extent_end.desc().nullslast()
@@ -192,6 +193,7 @@ def _build_survey_related_record_id_statement(
     record_ids: list[identifiers.SurveyRelatedRecordId] | None = None,
     dataset_category_id: identifiers.DatasetCategoryId | None = None,
     workflow_stage_id: identifiers.WorkflowStageId | None = None,
+    only_data_assets: bool = True,
 ):
     """Build a statement selecting only the ids of matching records.
 
@@ -210,6 +212,7 @@ def _build_survey_related_record_id_statement(
         record_ids=record_ids,
         dataset_category_id=dataset_category_id,
         workflow_stage_id=workflow_stage_id,
+        only_data_assets=only_data_assets,
     )
 
 
@@ -243,6 +246,7 @@ async def list_published_survey_related_records(
     record_ids: list[identifiers.SurveyRelatedRecordId] | None = None,
     dataset_category_id: identifiers.DatasetCategoryId | None = None,
     workflow_stage_id: identifiers.WorkflowStageId | None = None,
+    only_data_assets: bool = True,
 ) -> tuple[list[models.SurveyRelatedRecord], int | None]:
     statement = _build_survey_related_record_statement(
         survey_mission_id=survey_mission_id,
@@ -256,6 +260,7 @@ async def list_published_survey_related_records(
         record_ids=record_ids,
         dataset_category_id=dataset_category_id,
         workflow_stage_id=workflow_stage_id,
+        only_data_assets=only_data_assets,
     ).where(models.SurveyRelatedRecord.status == SurveyRelatedRecordStatus.PUBLISHED)
     limit = page_size
     offset = page_size * (page - 1)
@@ -276,6 +281,7 @@ def build_survey_related_record_id_statement(
     excluded_record_ids: list[identifiers.SurveyRelatedRecordId] | None = None,
     dataset_category_id: identifiers.DatasetCategoryId | None = None,
     workflow_stage_id: identifiers.WorkflowStageId | None = None,
+    only_data_assets: bool = True,
 ):
     """Build a statement selecting the ids of matching records, unrestricted.
 
@@ -292,6 +298,7 @@ def build_survey_related_record_id_statement(
         record_ids,
         dataset_category_id,
         workflow_stage_id,
+        only_data_assets,
     )
     if excluded_record_ids:
         statement = statement.where(
@@ -312,6 +319,7 @@ def build_owned_survey_related_record_id_statement(
     excluded_record_ids: list[identifiers.SurveyRelatedRecordId] | None = None,
     dataset_category_id: identifiers.DatasetCategoryId | None = None,
     workflow_stage_id: identifiers.WorkflowStageId | None = None,
+    only_data_assets: bool = True,
 ):
     """Build a statement selecting the ids of matching records a user owns.
 
@@ -329,6 +337,7 @@ def build_owned_survey_related_record_id_statement(
         record_ids,
         dataset_category_id,
         workflow_stage_id,
+        only_data_assets,
     )
     if excluded_record_ids:
         statement = statement.where(
@@ -365,6 +374,7 @@ async def list_survey_related_records(
     only_internal: bool = False,
     dataset_category_id: identifiers.DatasetCategoryId | None = None,
     workflow_stage_id: identifiers.WorkflowStageId | None = None,
+    only_data_assets: bool = True,
 ) -> tuple[list[models.SurveyRelatedRecord], int | None]:
     """Return all records. Intended for admin use."""
     statement = _build_survey_related_record_statement(
@@ -379,6 +389,7 @@ async def list_survey_related_records(
         record_ids=record_ids,
         dataset_category_id=dataset_category_id,
         workflow_stage_id=workflow_stage_id,
+        only_data_assets=only_data_assets,
     )
     if only_internal:
         statement = statement.where(

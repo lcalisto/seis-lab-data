@@ -297,15 +297,20 @@ async def update_survey_related_record(
                 if identifiers.RecordAssetId(a.id) == proposed_asset.id
             ][0]
         except IndexError:  # this is a new asset that needs to be created
-            if await asset_queries.get_record_asset_by_file_path(
-                session,
-                proposed_asset.relative_path,
-                identifiers.SurveyMissionId(survey_related_record.survey_mission_id),
-            ):
-                raise errors.DuplicateResourceError(
-                    f"There is already a survey-related record with asset path "
-                    f"{proposed_asset.relative_path!r} for the same survey mission."
-                )
+            # assets without a path are exempt from the per-mission path
+            # uniqueness rule
+            if proposed_asset.relative_path is not None:
+                if await asset_queries.get_record_asset_by_file_path(
+                    session,
+                    proposed_asset.relative_path,
+                    identifiers.SurveyMissionId(
+                        survey_related_record.survey_mission_id
+                    ),
+                ):
+                    raise errors.DuplicateResourceError(
+                        f"There is already a survey-related record with asset path "
+                        f"{proposed_asset.relative_path!r} for the same survey mission."
+                    )
             db_asset = models.RecordAsset(
                 **proposed_asset.model_dump(),
                 survey_related_record_id=survey_related_record.id,

@@ -314,7 +314,7 @@ async def test_create_survey_related_record(
         workflow_stage_id=identifiers.WorkflowStageId(workflow_stage.id),
         relative_path="fake-record",
         assets=[
-            record_schemas.RecordAssetCreate(
+            record_schemas.DataRecordAssetCreate(
                 id=identifiers.RecordAssetId(
                     uuid.UUID("3cf81de8-60f3-44df-89f4-6f674a7fb94f")
                 ),
@@ -327,8 +327,9 @@ async def test_create_survey_related_record(
                     pt="descrição para o primeiro recurso",
                 ),
                 relative_path="asset1",
+                media_type="application/octet-stream",
             ),
-            record_schemas.RecordAssetCreate(
+            record_schemas.DataRecordAssetCreate(
                 id=identifiers.RecordAssetId(
                     uuid.UUID("85ded7b6-a794-4746-b450-c3bdfb07e5c0")
                 ),
@@ -341,6 +342,7 @@ async def test_create_survey_related_record(
                     pt="descrição para o segundo recurso",
                 ),
                 relative_path="asset2",
+                media_type="application/octet-stream",
             ),
         ],
     )
@@ -787,7 +789,7 @@ async def test_create_survey_related_record_rejects_duplicate_asset_path_in_same
                 workflow_stage_id=identifiers.WorkflowStageId(workflow_stage.id),
                 relative_path="first-record",
                 assets=[
-                    record_schemas.RecordAssetCreate(
+                    record_schemas.DataRecordAssetCreate(
                         id=identifiers.RecordAssetId(
                             uuid.UUID("c14a8ee3-46f2-4b23-9d8a-7f6e51b0e3a1")
                         ),
@@ -819,7 +821,7 @@ async def test_create_survey_related_record_rejects_duplicate_asset_path_in_same
                     workflow_stage_id=identifiers.WorkflowStageId(workflow_stage.id),
                     relative_path="second-record",
                     assets=[
-                        record_schemas.RecordAssetCreate(
+                        record_schemas.DataRecordAssetCreate(
                             id=identifiers.RecordAssetId(
                                 uuid.UUID("1d4e5f6a-7b8c-4d9e-8f0a-1b2c3d4e5f6a")
                             ),
@@ -871,7 +873,7 @@ async def test_create_survey_related_record_allows_duplicate_asset_path_in_diffe
                 workflow_stage_id=identifiers.WorkflowStageId(workflow_stage.id),
                 relative_path="first-record",
                 assets=[
-                    record_schemas.RecordAssetCreate(
+                    record_schemas.DataRecordAssetCreate(
                         id=identifiers.RecordAssetId(
                             uuid.UUID("e5f6a7b8-d9e0-4f1a-8b2c-3d4e5f6a7b8c")
                         ),
@@ -902,7 +904,7 @@ async def test_create_survey_related_record_allows_duplicate_asset_path_in_diffe
                 workflow_stage_id=identifiers.WorkflowStageId(workflow_stage.id),
                 relative_path="second-record",
                 assets=[
-                    record_schemas.RecordAssetCreate(
+                    record_schemas.DataRecordAssetCreate(
                         id=identifiers.RecordAssetId(
                             uuid.UUID("a7b8c9d0-f1a2-4b3c-8d4e-5f6a7b8c9d0e")
                         ),
@@ -939,7 +941,7 @@ async def test_update_survey_related_record_rejects_duplicate_asset_path_for_new
                 fresh_first,
                 record_schemas.SurveyRelatedRecordUpdate(
                     assets=[
-                        record_schemas.RecordAssetUpdate(
+                        record_schemas.DataRecordAssetUpdate(
                             id=identifiers.RecordAssetId(a.id),
                             relative_path=a.relative_path,
                         )
@@ -948,7 +950,7 @@ async def test_update_survey_related_record_rejects_duplicate_asset_path_for_new
                     + [
                         # "second-asset" is already registered on this same
                         # mission (via first_record itself)
-                        record_schemas.RecordAssetUpdate(
+                        record_schemas.DataRecordAssetUpdate(
                             id=identifiers.RecordAssetId(uuid.uuid4()),
                             name=common_schemas.LocalizableDraftName(
                                 en="Conflicting asset"
@@ -1008,7 +1010,7 @@ async def test_update_survey_related_record_allows_pathless_assets(
             fresh_first,
             record_schemas.SurveyRelatedRecordUpdate(
                 assets=[
-                    record_schemas.RecordAssetUpdate(
+                    record_schemas.DataRecordAssetUpdate(
                         id=identifiers.RecordAssetId(a.id),
                         relative_path=a.relative_path,
                     )
@@ -1016,7 +1018,7 @@ async def test_update_survey_related_record_allows_pathless_assets(
                     if constants.AssetType.DATA in a.asset_type
                 ]
                 + [
-                    record_schemas.RecordAssetUpdate(
+                    record_schemas.DataRecordAssetUpdate(
                         id=new_asset_id,
                         name=common_schemas.LocalizableDraftName(en="Pathless asset"),
                         description=common_schemas.LocalizableDraftDescription(
@@ -1060,7 +1062,7 @@ async def test_update_survey_related_record_preserves_derived_assets(
                     constants.AssetType.THUMBNAIL,
                     constants.AssetType.PREVIEW,
                 ],
-                geom="POINT(-9.1 38.7)",
+                geog="POINT(-9.1 38.7)",
                 data=derived_payload,
             )
         )
@@ -1078,7 +1080,7 @@ async def test_update_survey_related_record_preserves_derived_assets(
                 ),
                 # the data assets are sent back unchanged, as the update form does
                 assets=[
-                    record_schemas.RecordAssetUpdate(
+                    record_schemas.DataRecordAssetUpdate(
                         id=identifiers.RecordAssetId(a.id),
                         relative_path=a.relative_path,
                         media_type=a.media_type,
@@ -1099,4 +1101,4 @@ async def test_update_survey_related_record_preserves_derived_assets(
         assert derived.media_type == "image/webp"
         assert derived.relative_path is None
         assert derived.data == derived_payload
-        assert derived.geom is not None
+        assert derived.geog is not None

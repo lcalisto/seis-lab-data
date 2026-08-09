@@ -1342,7 +1342,7 @@ class SurveyRelatedRecordDetailEndpoint(HTTPEndpoint):
                 for lf in form_instance.links.entries
             ],
             assets=[
-                record_schemas.RecordAssetUpdate(
+                record_schemas.DataRecordAssetUpdate(
                     id=identifiers.RecordAssetId(uuid.UUID(af.asset_id.data)),
                     name=common_schemas.LocalizableDraftName(
                         en=af.asset_name.en.data,

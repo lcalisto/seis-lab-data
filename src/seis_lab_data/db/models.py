@@ -1,3 +1,4 @@
+import base64
 import datetime as dt
 import json
 import uuid
@@ -422,19 +423,20 @@ class RecordAsset(SQLModel, table=True):
             ARRAY(Enum(constants.AssetType, name="assettype")), nullable=False
         ),
     )
-    # spatial extent of derived assets - deliberately not one single geometry type
-    geom: Annotated[
+    # simplified version of the main data asset - deliberately not one single geometry type
+    geog: Annotated[
         WKBElement | None,
         PlainSerializer(
             serialize_wkbelement, return_type=dict, when_used="json-unless-none"
         ),
     ] = Field(default=None, sa_column=Column(Geography(srid=4326, spatial_index=True)))
-    # the payload of derived assets - serialized as its length, since raw bytes
-    # cannot cross model_dump_json()
+    # simplified version of the main data asset (low-res raster, histogram, ...)
     data: Annotated[
         bytes | None,
         PlainSerializer(
-            lambda v: len(v), return_type=int, when_used="json-unless-none"
+            lambda v: base64.b64encode(v).decode(),
+            return_type=str,
+            when_used="json-unless-none",
         ),
     ] = Field(default=None, sa_column=Column(LargeBinary))
     links: Annotated[list[Link], PlainSerializer(serialize_localizable_field)] = Field(

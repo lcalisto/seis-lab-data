@@ -39,7 +39,7 @@ def upgrade() -> None:
     op.add_geospatial_column(
         "recordasset",
         sa.Column(
-            "geom",
+            "geog",
             Geography(
                 srid=4326,
                 dimension=2,
@@ -82,9 +82,9 @@ def upgrade() -> None:
         "recordasset", "media_type", existing_type=sa.VARCHAR(), nullable=False
     )
     op.create_geospatial_index(
-        "idx_recordasset_geom",
+        "idx_recordasset_geog",
         "recordasset",
-        ["geom"],
+        ["geog"],
         unique=False,
         postgresql_using="gist",
         postgresql_ops={},
@@ -92,18 +92,18 @@ def upgrade() -> None:
     # martin table sources query via a geometry cast, which the geography GiST
     # index cannot serve
     op.execute(
-        "CREATE INDEX idx_recordasset_geom_geometry ON recordasset USING gist ((geom::geometry))"
+        "CREATE INDEX idx_recordasset_geog_geometry ON recordasset USING gist ((geog::geometry))"
     )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.execute("DROP INDEX idx_recordasset_geom_geometry")
+    op.execute("DROP INDEX idx_recordasset_geog_geometry")
     op.drop_geospatial_index(
-        "idx_recordasset_geom",
+        "idx_recordasset_geog",
         table_name="recordasset",
         postgresql_using="gist",
-        column_name="geom",
+        column_name="geog",
     )
     op.alter_column(
         "recordasset", "media_type", existing_type=sa.VARCHAR(), nullable=True
@@ -113,6 +113,6 @@ def downgrade() -> None:
         "recordasset", "relative_path", existing_type=sa.VARCHAR(), nullable=False
     )
     op.drop_column("recordasset", "data")
-    op.drop_geospatial_column("recordasset", "geom")
+    op.drop_geospatial_column("recordasset", "geog")
     op.drop_column("recordasset", "asset_type")
     sa.Enum("DATA", "THUMBNAIL", "PREVIEW", name="assettype").drop(op.get_bind())

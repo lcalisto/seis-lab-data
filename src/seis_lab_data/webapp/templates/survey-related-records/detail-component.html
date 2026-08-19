@@ -198,12 +198,10 @@
                 <dd class="col-sm-9">{{ asset.is_valid }}</dd>
                 <dt class="col-sm-3">{{ _("media type") | capitalize }}</dt>
                 <dd class="col-sm-9">{{ asset.media_type | default(_("unknown"), true) }}</dd>
-                {% if asset.relative_path %}
-                    <dt class="col-sm-3">{{ _("Relative path") }}</dt>
-                    <dd class="col-sm-9">{{ asset.relative_path }}</dd>
-                    <dt class="col-sm-3">{{ _("Archive URL") }}</dt>
-                    <dd class="col-sm-9">{{ asset | asset_url(item) }}</dd>
-                {% endif %}
+                <dt class="col-sm-3">{{ _("Relative path") }}</dt>
+                <dd class="col-sm-9">{{ asset.relative_path }}</dd>
+                <dt class="col-sm-3">{{ _("Archive URL") }}</dt>
+                <dd class="col-sm-9">{{ asset | asset_url(item) }}</dd>
             </dl>
         {% else %}
             {{ _("No assets found") }}

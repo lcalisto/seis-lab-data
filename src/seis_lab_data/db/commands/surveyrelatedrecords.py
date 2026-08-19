@@ -70,6 +70,7 @@ async def create_survey_related_record(
         db_asset = models.RecordAsset(
             **asset_to_create.model_dump(),
             survey_related_record_id=survey_record.id,
+            asset_type=[AssetType.DATA],
         )
         session.add(db_asset)
     for related in to_create.related_records:
@@ -314,6 +315,7 @@ async def update_survey_related_record(
             db_asset = models.RecordAsset(
                 **proposed_asset.model_dump(),
                 survey_related_record_id=survey_related_record.id,
+                asset_type=[AssetType.DATA],
             )
             session.add(db_asset)
             current_data_paths.add(db_asset.relative_path)

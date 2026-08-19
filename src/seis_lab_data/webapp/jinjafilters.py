@@ -162,7 +162,8 @@ def get_url_for_asset(
     asset: "record_schemas.RecordAssetReadDetailEmbedded",
     item: "record_schemas.SurveyRelatedRecordReadDetail",
 ) -> str:
-    if not asset.relative_path:  # derived assets have no file in the archive
+    if constants.AssetType.DATA not in asset.asset_type:
+        # derived assets have no file in the archive
         return ""
     settings: SeisLabDataSettings = context.get("settings")
     return "/".join(

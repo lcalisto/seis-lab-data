@@ -418,7 +418,6 @@ class RecordAsset(SQLModel, table=True):
     relative_path: str | None = None
     media_type: str
     asset_type: list[constants.AssetType] = Field(
-        default_factory=lambda: [constants.AssetType.DATA],
         sa_column=Column(
             ARRAY(Enum(constants.AssetType, name="assettype")), nullable=False
         ),

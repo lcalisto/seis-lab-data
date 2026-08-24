@@ -5,6 +5,7 @@ from sqlmodel import (
     select,
 )
 
+from ...constants import AssetType
 from ...db import models
 from ...schemas import identifiers
 from .common import _get_total_num_records
@@ -96,12 +97,15 @@ async def get_record_asset_by_file_path(
 
 def _get_media_type_list_statement(
     name_filter: str | None = None,
+    only_data_assets: bool = True,
 ):
     statement = (
         select(models.RecordAsset.media_type)
         .distinct()
         .order_by(models.RecordAsset.media_type)
     )
+    if only_data_assets:
+        statement = statement.where(models.RecordAsset.asset_type.any(AssetType.DATA))
     if name_filter:
         statement = statement.where(
             models.RecordAsset.media_type.ilike(f"%{name_filter}%")
@@ -114,8 +118,9 @@ async def list_media_types(
     page: int = 1,
     page_size: int = 20,
     name_filter: str | None = None,
+    only_data_assets: bool = True,
 ) -> list[str]:
-    statement = _get_media_type_list_statement(name_filter)
+    statement = _get_media_type_list_statement(name_filter, only_data_assets)
     limit = page_size
     offset = page_size * (page - 1)
     statement = statement.offset(offset).limit(limit)
@@ -129,6 +134,7 @@ async def list_media_types(
 async def count_media_types(
     session: AsyncSession,
     name_filter: str | None = None,
+    only_data_assets: bool = True,
 ) -> int:
-    statement = _get_media_type_list_statement(name_filter)
+    statement = _get_media_type_list_statement(name_filter, only_data_assets)
     return (await session.exec(select(func.count()).select_from(statement))).first()

@@ -551,6 +551,7 @@ async def get_update_form(request: Request):
                         "en": ass.description.en,
                         "pt": ass.description.pt,
                     },
+                    "media_type": ass.media_type,
                     "relative_path": ass.relative_path,
                     "asset_links": [
                         {
@@ -565,7 +566,10 @@ async def get_update_form(request: Request):
                         for ali in ass.links
                     ],
                 }
+                # derived assets are not editable by users, so they stay out of
+                # the form - the update command keeps them
                 for ass in details.item.record_assets
+                if constants.AssetType.DATA in ass.asset_type
             ],
             "related_records": [
                 {
@@ -800,7 +804,7 @@ async def remove_update_form_asset(request: Request):
     form_instance = await forms.SurveyRelatedRecordUpdateForm.from_request(request)
     # TODO: Check we are not trying to remove an index that is invalid
     index = int(request.query_params.get("index", 0))
-    form_instance.asset.entries.pop(index)
+    form_instance.assets.entries.pop(index)
     template_processor: Jinja2Templates = request.state.templates
     template = template_processor.get_template(
         "survey-related-records/update-form.html"
@@ -1339,7 +1343,7 @@ class SurveyRelatedRecordDetailEndpoint(HTTPEndpoint):
                 for lf in form_instance.links.entries
             ],
             assets=[
-                record_schemas.RecordAssetUpdate(
+                record_schemas.DataRecordAssetUpdate(
                     id=identifiers.RecordAssetId(uuid.UUID(af.asset_id.data)),
                     name=common_schemas.LocalizableDraftName(
                         en=af.asset_name.en.data,

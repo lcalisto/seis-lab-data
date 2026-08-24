@@ -2,8 +2,11 @@ import uuid
 
 import pytest
 
+from seis_lab_data import constants
+from seis_lab_data.db import models
 from seis_lab_data.db.queries import (
     projects as project_queries,
+    recordassets as asset_queries,
     surveymissions as mission_queries,
     surveyrelatedrecords as record_queries,
 )
@@ -93,3 +96,36 @@ async def test_list_survey_related_records_project_id_filter(
             session, project_id=project_id_filter, include_total=True
         )
         assert total == expected_total
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_media_type_queries_ignore_derived_assets(
+    sample_survey_related_records, db_session_maker
+):
+    # a preview's media type is an implementation detail: it must neither show
+    # up in the media type datalist nor make its record match a search
+    first_record, _second_record = sample_survey_related_records
+    async with db_session_maker() as session:
+        session.add(
+            models.RecordAsset(
+                id=uuid.uuid4(),
+                name={"en": "A derived asset"},
+                description={"en": ""},
+                survey_related_record_id=first_record.id,
+                media_type="image/webp",
+                asset_type=[constants.AssetType.PREVIEW],
+            )
+        )
+        await session.commit()
+
+        media_types = await asset_queries.list_media_types(session)
+        assert "image/webp" not in media_types
+        # the media type the sample assets declare
+        assert "application/octet-stream" in media_types
+        assert await asset_queries.count_media_types(session) == len(media_types)
+
+        _records, total = await record_queries.list_survey_related_records(
+            session, asset_media_type_filter="image/webp", include_total=True
+        )
+        assert total == 0

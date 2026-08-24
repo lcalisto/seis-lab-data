@@ -64,7 +64,7 @@
                                 <li class="card-text text-truncate">
                                     {{ item.description|translate_localizable_string|default(_("description not available"), True) }}
                                 </li>
-                                <li class="card-text"><small>{{ item.record_assets | map(attribute="relative_path") | join(",") }}</small></li>
+                                <li class="card-text"><small>{{ item.record_assets | map(attribute="relative_path") | select | join(",") }}</small></li>
                             </ul>
                         </div>
                         <div class="col">

@@ -143,6 +143,19 @@ class ProcessingStatus(str, enum.Enum):
         }.get(self, self.value)
 
 
+class AssetType(str, enum.Enum):
+    DATA = "data"
+    THUMBNAIL = "thumbnail"
+    PREVIEW = "preview"
+
+    def get_translated_value(self) -> str:
+        return {
+            self.DATA: _("data"),
+            self.THUMBNAIL: _("thumbnail"),
+            self.PREVIEW: _("preview"),
+        }.get(self, self.value)
+
+
 class ProjectStatus(str, enum.Enum):
     DRAFT = "draft"
     PUBLISHED = "published"

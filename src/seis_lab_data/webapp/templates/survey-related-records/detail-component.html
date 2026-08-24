@@ -185,7 +185,9 @@
 <div class="row">
     <div class="col">
         <h2>{{ _("assets") | capitalize }}</h2>
-        {% for asset in item.record_assets %}
+        {# derived assets (previews, thumbnails) are filtered out here, in the loop
+           head, so that a record holding only those still shows the empty message #}
+        {% for asset in item.record_assets if AssetType.DATA in asset.asset_type %}
             <dl class="row">
                 <dt class="col-sm-3">{{ _("Name") }}</dt>
                 <dd class="col-sm-9">{{ asset.name|translate_localizable_string }}</dd>

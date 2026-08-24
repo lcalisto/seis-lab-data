@@ -117,7 +117,8 @@ async def test_bulk_update_asset_media_type_filter_excludes_non_matching_records
     sample_survey_related_records,
     admin_user,
 ):
-    # sample record assets don't have a media_type set, so any filter value excludes them
+    # sample record assets declare application/octet-stream as their media type,
+    # so this filter matches none of them
     to_update = record_schemas.SurveyRelatedRecordBulkUpdate(
         description=common_schemas.LocalizableDraftDescription(en="Should not apply")
     )

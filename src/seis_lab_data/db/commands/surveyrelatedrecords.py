@@ -22,7 +22,10 @@ from sqlalchemy.dialects.postgresql import (
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ... import errors
-from ...constants import SurveyRelatedRecordStatus
+from ...constants import (
+    AssetType,
+    SurveyRelatedRecordStatus,
+)
 from ...schemas import (
     filters as filter_schemas,
     identifiers,
@@ -67,6 +70,7 @@ async def create_survey_related_record(
         db_asset = models.RecordAsset(
             **asset_to_create.model_dump(),
             survey_related_record_id=survey_record.id,
+            asset_type=[AssetType.DATA],
         )
         session.add(db_asset)
     for related in to_create.related_records:
@@ -277,6 +281,15 @@ async def update_survey_related_record(
     survey_related_record.bbox_4326 = updated_bbox_4326
     session.add(survey_related_record)
 
+    # taken before the proposed changes are applied, in order to detect whether
+    # the record's data files end up different
+    previous_data_paths = {
+        a.relative_path
+        for a in survey_related_record.assets
+        if AssetType.DATA in a.asset_type
+    }
+    current_data_paths = set()
+
     for proposed_asset in to_update.assets:
         try:
             existing_asset = [
@@ -285,20 +298,27 @@ async def update_survey_related_record(
                 if identifiers.RecordAssetId(a.id) == proposed_asset.id
             ][0]
         except IndexError:  # this is a new asset that needs to be created
-            if await asset_queries.get_record_asset_by_file_path(
-                session,
-                proposed_asset.relative_path,
-                identifiers.SurveyMissionId(survey_related_record.survey_mission_id),
-            ):
-                raise errors.DuplicateResourceError(
-                    f"There is already a survey-related record with asset path "
-                    f"{proposed_asset.relative_path!r} for the same survey mission."
-                )
+            # assets without a path are exempt from the per-mission path
+            # uniqueness rule
+            if proposed_asset.relative_path is not None:
+                if await asset_queries.get_record_asset_by_file_path(
+                    session,
+                    proposed_asset.relative_path,
+                    identifiers.SurveyMissionId(
+                        survey_related_record.survey_mission_id
+                    ),
+                ):
+                    raise errors.DuplicateResourceError(
+                        f"There is already a survey-related record with asset path "
+                        f"{proposed_asset.relative_path!r} for the same survey mission."
+                    )
             db_asset = models.RecordAsset(
                 **proposed_asset.model_dump(),
                 survey_related_record_id=survey_related_record.id,
+                asset_type=[AssetType.DATA],
             )
             session.add(db_asset)
+            current_data_paths.add(db_asset.relative_path)
         else:  # this is an existing asset that needs to be updated
             for key, value in proposed_asset.model_dump(exclude_unset=True).items():
                 setattr(existing_asset, key, value)
@@ -306,8 +326,20 @@ async def update_survey_related_record(
 
     proposed_asset_ids = [s.id for s in to_update.assets]
     for existing_asset in survey_related_record.assets:
-        if identifiers.RecordAssetId(existing_asset.id) not in proposed_asset_ids:
+        if AssetType.DATA not in existing_asset.asset_type:
+            # derived assets are never part of an update's payload, so their
+            # absence from it must not be taken as a removal
+            continue
+        if identifiers.RecordAssetId(existing_asset.id) in proposed_asset_ids:
+            current_data_paths.add(existing_asset.relative_path)
+        else:
             await session.delete(existing_asset)
+    if current_data_paths != previous_data_paths:
+        # previews and thumbnails are derived from the record's data files, so
+        # they become stale as soon as those change
+        for existing_asset in survey_related_record.assets:
+            if AssetType.DATA not in existing_asset.asset_type:
+                await session.delete(existing_asset)
 
     already_related_to = (
         await record_queries.list_survey_related_record_related_to_records(

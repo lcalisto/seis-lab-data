@@ -482,7 +482,7 @@ def get_survey_related_records_to_create(
             relative_path="first-record",
             links=[],
             assets=[
-                record_schemas.RecordAssetCreate(
+                record_schemas.DataRecordAssetCreate(
                     id=identifiers.RecordAssetId(
                         uuid.UUID("85f4683c-7d4a-444c-8896-04278bc89e63")
                     ),
@@ -495,9 +495,10 @@ def get_survey_related_records_to_create(
                         pt="Descrição do primeiro recurso",
                     ),
                     relative_path="first-asset",
+                    media_type="application/octet-stream",
                     links=[],
                 ),
-                record_schemas.RecordAssetCreate(
+                record_schemas.DataRecordAssetCreate(
                     id=identifiers.RecordAssetId(
                         uuid.UUID("a9eca3df-03ba-4f46-a98d-3e30139eb035")
                     ),
@@ -510,6 +511,7 @@ def get_survey_related_records_to_create(
                         pt="Descrição do segundo recurso",
                     ),
                     relative_path="second-asset",
+                    media_type="application/octet-stream",
                     links=[],
                 ),
             ],
@@ -537,7 +539,7 @@ def get_survey_related_records_to_create(
             relative_path="second-record",
             links=[],
             assets=[
-                record_schemas.RecordAssetCreate(
+                record_schemas.DataRecordAssetCreate(
                     id=identifiers.RecordAssetId(
                         uuid.UUID("a53728ed-5422-4f08-806f-3e75bbb1b3e8")
                     ),
@@ -550,9 +552,10 @@ def get_survey_related_records_to_create(
                         pt="Descrição do terceiro recurso",
                     ),
                     relative_path="third-asset",
+                    media_type="application/octet-stream",
                     links=[],
                 ),
-                record_schemas.RecordAssetCreate(
+                record_schemas.DataRecordAssetCreate(
                     id=identifiers.RecordAssetId(
                         uuid.UUID("bd4bed96-43bd-4d5c-a7b2-d04461dfb23c")
                     ),
@@ -565,6 +568,7 @@ def get_survey_related_records_to_create(
                         pt="Descrição do quarto recurso",
                     ),
                     relative_path="fourth-asset",
+                    media_type="application/octet-stream",
                     links=[],
                 ),
             ],
@@ -747,7 +751,7 @@ def generate_sample_survey_related_records(
         )
 
 
-def generate_sample_asset() -> Iterator[record_schemas.RecordAssetCreate]:
+def generate_sample_asset() -> Iterator[record_schemas.DataRecordAssetCreate]:
     for _ in count():
         links = (
             [
@@ -757,7 +761,7 @@ def generate_sample_asset() -> Iterator[record_schemas.RecordAssetCreate]:
             if _FAKE_EN.random_digit() < 5
             else []
         )
-        yield record_schemas.RecordAssetCreate(
+        yield record_schemas.DataRecordAssetCreate(
             id=identifiers.RecordAssetId(uuid.uuid4()),
             name=common_schemas.LocalizableDraftName(
                 en=f"sample_{_FAKE_EN.sentence()}",

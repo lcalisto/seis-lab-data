@@ -87,6 +87,7 @@ async def lifespan(app: Starlette) -> AsyncIterator[State]:
                 "SURVEY_RELATED_RECORD_MAX_RELATED": constants.SURVEY_RELATED_RECORD_MAX_RELATED,
             },
             "settings": settings,
+            "AssetType": constants.AssetType,
             "ProjectStatus": constants.ProjectStatus,
             "SurveyRelatedRecordStatus": constants.SurveyRelatedRecordStatus,
             "default_webmap_bounds": {

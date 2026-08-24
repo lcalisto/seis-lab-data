@@ -247,6 +247,10 @@ async def test_discovery_extracts_metadata(db_session_maker, admin_user, discove
     assert assets[0].relative_path == "s01/sub/grid.tif"
     # the extracted summary goes on the record only; the asset stays empty
     assert assets[0].description["en"] == ""
+    # discovered assets are the record's data files, with a media type derived
+    # from the file extension
+    assert assets[0].asset_type == [constants.AssetType.DATA]
+    assert assets[0].media_type == "application/prs.ipma.tif"
 
 
 @pytest.mark.integration

@@ -7,18 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.5.0] - 2026-09-06
+
+### Added
+- Initial version of STAC API
+- Initial version of archive discovery
+- UI Footer
+- Added more tests
+
 ### Fixed
-- `auth-worker`'s healthcheck now polls the unauthenticated OIDC discovery
-  endpoint for the seis-lab-data application instead of checking for the
-  akadmin user. Checking for akadmin only proved that authentik's bootstrap
-  had run, not that the custom blueprint (which creates the OAuth2 client)
-  had been applied, which was a race condition causing e2e tests to
-  intermittently fail in CI with "Client ID Error" on the login page.
+- Multiple UI improvements and fixes
+- Improve reliability of CI
 
 ### Changed
-- Authentik image is now 2025-12-04
-- Authentik proxy outpost host_url now points to public URL of authentik
-
+- Docs are now part of the stack
 
 
 ## [0.1.17] - 2026-02-17
@@ -151,7 +154,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - First release, mainly for trying out the deployment workflows
 
-[unreleased]: https://github.com/naturalgis/seis-lab-data/compare/v0.1.17...HEAD
+[unreleased]: https://github.com/naturalgis/seis-lab-data/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/naturalgis/seis-lab-data/compare/v0.1.17...v0.5.0
 [0.1.17]: https://github.com/naturalgis/seis-lab-data/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/naturalgis/seis-lab-data/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/naturalgis/seis-lab-data/compare/v0.1.14...v0.1.15

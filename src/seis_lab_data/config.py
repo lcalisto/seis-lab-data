@@ -102,6 +102,10 @@ class SeisLabDataSettings(BaseSettings):
     source_code_repository_url: str = "https://github.com/naturalgis/seis-lab-data"
     static_dir: Optional[Path] = Path(__file__).parent / "webapp/static"
     templates_dir: Optional[Path] = Path(__file__).parent / "webapp/templates"
+    # survey folders where asset previews are generated, as family/stage prefixes
+    preview_folders_path: Path = (
+        Path(__file__).parents[2] / "config" / "preview-folders.json"
+    )
     message_broker_dsn: Optional[RedisDsn] = RedisDsn("redis://localhost:6379")
     message_broker_channels: list[str] = ["demo-channel"]
     locales: list[str] = ["pt", "en"]

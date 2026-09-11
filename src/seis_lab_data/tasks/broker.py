@@ -25,6 +25,7 @@ from .middleware import (
 from . import (
     datasetcategories,  # noqa
     discovery,  # noqa
+    previews,  # noqa
     projects,  # noqa
     surveymissions,  # noqa
     surveyrelatedrecords,  # noqa

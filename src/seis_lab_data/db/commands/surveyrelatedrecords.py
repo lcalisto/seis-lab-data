@@ -9,6 +9,7 @@ from sqlalchemy import (
     delete,
     func,
     select,
+    text,
     true,
     update,
     values,
@@ -336,7 +337,12 @@ async def update_survey_related_record(
             await session.delete(existing_asset)
     if current_data_paths != previous_data_paths:
         # previews and thumbnails are derived from the record's data files, so
-        # they become stale as soon as those change
+        # they become stale as soon as those change; the advisory lock keeps an
+        # in-flight preview task from re-inserting them after this delete
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:record_id))"),
+            {"record_id": str(survey_related_record.id)},
+        )
         for existing_asset in survey_related_record.assets:
             if AssetType.DATA not in existing_asset.asset_type:
                 await session.delete(existing_asset)

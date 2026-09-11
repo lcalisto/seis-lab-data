@@ -10,12 +10,14 @@ from seis_lab_data.db import models
 from seis_lab_data.db.commands import (
     datasetcategories as category_commands,
     projects as project_commands,
+    recordassets as asset_commands,
     surveymissions as mission_commands,
     surveyrelatedrecords as record_commands,
     workflowstages as stage_commands,
 )
 from seis_lab_data.db.queries import (
     projects as project_queries,
+    recordassets as asset_queries,
     surveymissions as mission_queries,
     surveyrelatedrecords as record_queries,
     datasetcategories as category_queries,
@@ -1102,3 +1104,69 @@ async def test_update_survey_related_record_preserves_derived_assets(
         assert derived.relative_path is None
         assert derived.data == derived_payload
         assert derived.geog is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_replace_derived_record_assets(
+    db,
+    db_session_maker,
+    sample_survey_related_records,
+    admin_user,
+):
+    first_record, second_record = sample_survey_related_records
+    record_id = identifiers.SurveyRelatedRecordId(first_record.id)
+    data_asset_ids = {a.id for a in first_record.assets}
+    async with db_session_maker() as session:
+        # a derived asset on ANOTHER record must survive the replacement below
+        other_derived_id = uuid.uuid4()
+        session.add(
+            models.RecordAsset(
+                id=other_derived_id,
+                survey_related_record_id=second_record.id,
+                name={"en": "other record preview"},
+                description={"en": ""},
+                media_type="image/webp",
+                asset_type=[constants.AssetType.PREVIEW],
+                data=b"fake webp payload",
+            )
+        )
+        await session.commit()
+        for preview_name in ("first preview", "second preview"):
+            await asset_commands.replace_derived_record_assets(
+                session,
+                first_record,
+                [
+                    record_schemas.DerivedRecordAssetCreate(
+                        id=identifiers.RecordAssetId(uuid.uuid4()),
+                        name=common_schemas.LocalizableDraftName(en=preview_name),
+                        media_type="image/webp",
+                        asset_type=[
+                            constants.AssetType.THUMBNAIL,
+                            constants.AssetType.PREVIEW,
+                        ],
+                        data=b"fake webp payload",
+                        geog=(
+                            "POLYGON((-9.1 38.7, -9.0 38.7, -9.0 38.8, "
+                            "-9.1 38.8, -9.1 38.7))"
+                        ),
+                    )
+                ],
+            )
+        assets = await asset_queries.collect_all_record_assets(session, record_id)
+
+    derived_assets = [a for a in assets if constants.AssetType.DATA not in a.asset_type]
+    # replacing is idempotent: only the last derived set survives, and the
+    # record's data assets are never touched
+    assert len(derived_assets) == 1
+    assert derived_assets[0].name["en"] == "second preview"
+    assert derived_assets[0].relative_path is None
+    assert derived_assets[0].geog is not None
+    assert {
+        a.id for a in assets if constants.AssetType.DATA in a.asset_type
+    } == data_asset_ids
+    async with db_session_maker() as session:
+        other_assets = await asset_queries.collect_all_record_assets(
+            session, identifiers.SurveyRelatedRecordId(second_record.id)
+        )
+    assert other_derived_id in {a.id for a in other_assets}

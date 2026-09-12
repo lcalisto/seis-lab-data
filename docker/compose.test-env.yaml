@@ -201,6 +201,21 @@ services:
     image: *common-image
     command:
       - "run-processing-worker"
+      - "--queues"
+      - "default"
+    volumes:
+      *common-volumes
+    environment:
+      <<: *common-env
+    <<: *common-secrets
+    restart: unless-stopped
+
+  previews-worker:
+    image: *common-image
+    command:
+      - "run-processing-worker"
+      - "--queues"
+      - "previews"
     volumes:
       *common-volumes
     environment:

@@ -537,3 +537,67 @@ async def test_discovery_survives_invalid_implicit_crs(
     records = await _get_mission_records(db_session_maker, discovery_env["mission"].id)
     assert len(records) == 1
     assert records[0].bbox_4326 is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_discovery_enqueues_previews_for_missing_only(
+    db_session_maker, admin_user, discovery_env, monkeypatch, tmp_path
+):
+    # s01/s02 both matches the fixture's discovery configuration regexp and
+    # serves as the family/stage prefix for preview eligibility
+    _write_geotiff(
+        discovery_env["archive_root"] / _MISSION_RELATIVE_PATH / "s01/s02/grid.tif"
+    )
+    preview_folders = tmp_path / "preview-folders.json"
+    preview_folders.write_text('{"folders": ["s01/s02"]}')
+    monkeypatch.setattr(
+        discovery_env["settings"], "preview_folders_path", preview_folders
+    )
+    enqueued = []
+    monkeypatch.setattr(
+        discovery_ops.preview_tasks.generate_record_previews,
+        "send",
+        lambda **kwargs: enqueued.append(kwargs),
+    )
+
+    await _run_discovery(
+        db_session_maker,
+        discovery_env["mission"].id,
+        discovery_env["settings"],
+        admin_user,
+    )
+    assert len(enqueued) == 1
+
+    # a record without derived assets is re-enqueued on re-discovery: that is
+    # the recovery path for previews whose generation failed
+    await _run_discovery(
+        db_session_maker,
+        discovery_env["mission"].id,
+        discovery_env["settings"],
+        admin_user,
+    )
+    assert len(enqueued) == 2
+
+    # once derived assets exist the record is left alone
+    records = await _get_mission_records(db_session_maker, discovery_env["mission"].id)
+    async with db_session_maker() as session:
+        session.add(
+            models.RecordAsset(
+                id=uuid.uuid4(),
+                survey_related_record_id=records[0].id,
+                name={"en": "grid.tif preview"},
+                description={"en": ""},
+                media_type="image/webp",
+                asset_type=[constants.AssetType.THUMBNAIL, constants.AssetType.PREVIEW],
+                data=b"fake webp payload",
+            )
+        )
+        await session.commit()
+    await _run_discovery(
+        db_session_maker,
+        discovery_env["mission"].id,
+        discovery_env["settings"],
+        admin_user,
+    )
+    assert len(enqueued) == 2

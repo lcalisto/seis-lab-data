@@ -61,6 +61,9 @@ def run_processing_worker(ctx: typer.Context) -> None:
                 "--watch-exclude=__pycache__/*",
             ]
         )
+    # extra args are passed straight to dramatiq, which is how a worker gets
+    # pinned to a queue (`run-processing-worker --queues previews`)
+    dramatiq_args.extend(ctx.args)
     sys.stdout.flush()
     sys.stderr.flush()
     context.status_console.print(

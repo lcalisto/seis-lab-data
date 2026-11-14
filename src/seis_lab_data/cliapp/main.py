@@ -5,6 +5,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
+from typing import Annotated
 
 from rich.padding import Padding
 from rich.panel import Panel
@@ -44,14 +45,40 @@ def base_callback(ctx: typer.Context) -> None:
     ctx.obj = {"main": context}
 
 
-@app.command(
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
-)
-def run_worker(ctx: typer.Context) -> None:
-    """Start a dramatiq worker
+@app.command()
+def run_worker(
+    ctx: typer.Context,
+    queues: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--queue",
+            help="Queue to consume, repeatable. All queues are consumed if omitted.",
+        ),
+    ] = None,
+    processes: Annotated[
+        int | None,
+        typer.Option(
+            min=1,
+            help=(
+                "Number of worker processes. Defaults to 1 in debug mode, otherwise "
+                "to dramatiq's default of one per CPU core."
+            ),
+        ),
+    ] = None,
+    threads: Annotated[
+        int | None,
+        typer.Option(
+            min=1,
+            help=(
+                "Number of threads per worker process. Defaults to 1 in debug mode, "
+                "otherwise to dramatiq's default of 8."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Start a dramatiq worker.
 
-    Extra arguments are passed straight to dramatiq, which is how a worker gets
-    pinned to a queue (`run-worker --queues previews`).
+    In debug mode the worker also reloads on source code changes.
     """
     context: config.SeisLabDataCliContext = ctx.obj["main"]
     panel = Panel(
@@ -70,13 +97,18 @@ def run_worker(ctx: typer.Context) -> None:
     if context.settings.debug:
         dramatiq_args.extend(
             [
-                "--processes=1",
-                "--threads=1",
                 f"--watch={Path(__file__).parents[1]}",
                 "--watch-exclude=__pycache__/*",
             ]
         )
-    dramatiq_args.extend(ctx.args)
+        processes = processes or 1
+        threads = threads or 1
+    if processes is not None:
+        dramatiq_args.append(f"--processes={processes}")
+    if threads is not None:
+        dramatiq_args.append(f"--threads={threads}")
+    if queues:
+        dramatiq_args.extend(["--queues", *queues])
     sys.stdout.flush()
     sys.stderr.flush()
     context.status_console.print(

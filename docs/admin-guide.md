@@ -175,6 +175,7 @@ db                   Up 2 weeks (healthy)
 dozzle               Up 2 weeks
 martin-tile-server   Up 2 weeks (healthy)
 message-broker       Up 2 weeks (healthy)
+discovery-worker     Up 2 weeks
 interactive-worker   Up 2 weeks
 long-tasks-worker    Up 2 weeks
 web-gateway          Up 2 weeks
@@ -204,6 +205,7 @@ Example output:
 /seis-lab-data-dozzle-1 → restart: unless-stopped
 /seis-lab-data-martin-tile-server-1 → restart: unless-stopped
 /seis-lab-data-message-broker-1 → restart: unless-stopped
+/seis-lab-data-discovery-worker-1 → restart: unless-stopped
 /seis-lab-data-interactive-worker-1 → restart: unless-stopped
 /seis-lab-data-long-tasks-worker-1 → restart: unless-stopped
 /seis-lab-data-web-gateway-1 → restart: unless-stopped
@@ -390,7 +392,7 @@ docker compose \
     -f compose.prod-env.yaml \
     --env-file compose-deployment.env \
     --env-file image-url.env \
-    up -d --force-recreate webapp interactive-worker long-tasks-worker
+    up -d --force-recreate webapp interactive-worker long-tasks-worker discovery-worker
 ```
 
 4. If the new version includes database migrations, run after the previous step:
@@ -511,16 +513,59 @@ catalog records.
 and processing of records in the system. Communicates with the webapplication mostly via a publish/subscribe
 pattern[^2] application through the `message broker` component.
 
-It runs as two services, so that tasks which may take long never delay the interactive ones:
+It runs as three services, so that tasks which may take long never delay the interactive ones, and archive
+discovery never delays the other long tasks:
 
 - `interactive-worker` - runs the quick, user-facing tasks, such as creating, updating, deleting, validating and
   publishing items (`default` queue)
-- `long-tasks-worker` - runs the tasks which may take long: archive discovery, previews, thumbnails and GeoNode
-  exports (`discovery`, `previews`, `thumbnails` and `exports` queues)
+- `long-tasks-worker` - runs previews, thumbnails and GeoNode exports (`previews`, `thumbnails` and `exports`
+  queues)
+- `discovery-worker` - runs archive discoveries (`discovery` queue)
 
-The `long-tasks-worker` runs `LONG_TASKS_WORKER_PROCESSES` processes (default 2) of `LONG_TASKS_WORKER_THREADS`
-threads each (default 4), which caps how many of its tasks run at the same time. These variables can be set in
-`compose-deployment.env`.
+The number of processes and threads of each service caps how many of its tasks run at the same time. They can be
+set in `compose-deployment.env`:
+
+| service | processes (default) | threads per process (default) |
+|---|---|---|
+| `interactive-worker` | `INTERACTIVE_WORKER_PROCESSES` (2) | `INTERACTIVE_WORKER_THREADS` (8) |
+| `long-tasks-worker` | `LONG_TASKS_WORKER_PROCESSES` (2) | `LONG_TASKS_WORKER_THREADS` (4) |
+| `discovery-worker` | `DISCOVERY_WORKER_PROCESSES` (3) | 1 |
+
+Each `discovery-worker` process discovers one mission at a time, so the number of processes is the number of
+missions that can be discovered in parallel.
+
+Each archive discovery reads `DISCOVERY_EXTRACTION_CONCURRENCY` files at the same time (default 4), each one in a
+worker process of its own, which can also be set in `compose-deployment.env`. Reading files from the archive is
+partly waiting on the storage and partly CPU work (e.g. walking the datagrams of a KMALL file), so a higher value
+speeds up discovery, at the cost of more load on the storage and on the CPU. Discovering several missions at once
+runs up to `DISCOVERY_WORKER_PROCESSES` × `DISCOVERY_EXTRACTION_CONCURRENCY` of these worker processes; on a
+machine that also runs the database and the other services, keep that well below the number of CPU cores.
+
+A discovery run stops after `DISCOVERY_TIME_LIMIT_HOURS` hours (default 24, at most 168), which can also be set in
+`compose-deployment.env`. The records it created until then are kept, and running the discovery again resumes it,
+as the files that already have records are skipped.
+
+Discovery writes its records in batches of up to 500 files, each one written at most 5 seconds after it began. These
+rarely need changing; if they do, set `SEIS_LAB_DATA__DISCOVERY_BATCH_SIZE` and
+`SEIS_LAB_DATA__DISCOVERY_BATCH_MAX_SECONDS` in the environment of the `discovery-worker` service in
+`compose.prod-env.yaml`. The previews of the records are requested as each batch is written, so they are generated
+by the `long-tasks-worker` while discovery is still running. At the end of each run, and with each progress update,
+the worker logs where the run's time went (walking the archive, extracting metadata and database work) and its
+slowest extractions, which helps in choosing these values.
+
+##### Database connections
+
+Each process of the `webapp` and of the workers keeps up to `SEIS_LAB_DATA__DB_POOL_SIZE` connections to the
+database open (default 5), and may open up to `SEIS_LAB_DATA__DB_MAX_OVERFLOW` more when busy (default 5). A task
+or request that finds no free connection waits up to `SEIS_LAB_DATA__DB_POOL_TIMEOUT` seconds (default 30), then
+fails. The database accepts at most 200 connections, as set by the `command` of the `db` service in
+`compose.prod-env.yaml`. When changing the number of processes, check that the total stays below that limit:
+
+```
+(webapp processes + all worker processes) × (DB_POOL_SIZE + DB_MAX_OVERFLOW) + martin pool + margin
+```
+
+With the defaults: (8 + 2 + 2 + 3) × (5 + 5) + 20 (martin) = 170, leaving 30 connections for administration.
 
 [^2]: General overview of the publish/subscribe pattern: <https://en.wikipedia.org/wiki/Publish%E2%80%93subscribe_pattern>
 

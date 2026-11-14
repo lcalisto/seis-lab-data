@@ -244,7 +244,7 @@ services:
     image: *common-image
     command:
       - "run-worker"
-      - "--queues"
+      - "--queue"
       - "default"
     environment:
       <<: *common-env
@@ -255,14 +255,37 @@ services:
     image: *common-image
     command:
       - "run-worker"
-      - "--queues"
+      - "--queue"
       - "previews"
+      - "--queue"
       - "thumbnails"
+      - "--queue"
       - "exports"
-      - "discovery"
     environment:
       <<: *common-env
       SEIS_LAB_DATA__THUMBNAIL_BASE_TILE_LAYER_URL: http://martin-tile-server:3000/emodnet-bathymetry/{z}/{x}/{y}
+    volumes:
+      *common-volumes
+
+  discovery-worker:
+    image: *common-image
+    command:
+      - "run-worker"
+      # one process discovers one mission at a time; set DISCOVERY_WORKER_PROCESSES
+      # to discover several missions in parallel
+      - "--processes"
+      - "${DISCOVERY_WORKER_PROCESSES:-1}"
+      - "--threads"
+      - "1"
+      - "--queue"
+      - "discovery"
+    environment:
+      <<: *common-env
+      # number of files whose metadata discovery reads at the same time, each in a
+      # worker process of its own (default: 4); raised because reads from a
+      # network-mounted archive (e.g. sshfs) are slow, and concurrent reads overlap
+      # their waiting time
+      SEIS_LAB_DATA__DISCOVERY_EXTRACTION_CONCURRENCY: 8
     volumes:
       *common-volumes
 

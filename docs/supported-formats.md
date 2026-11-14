@@ -32,7 +32,11 @@ Used as primary file for processed bathymetry/backscatter grids and interpreted 
 | Stages | Raw data, QC, Interpreted data |
 
 Plain text point cloud format with X, Y, Z columns. Used as primary file for raw/QC bathymetry
-data and as secondary file in some stages. GDAL reads it as a gridded raster dataset.
+data and as secondary file in some stages. GDAL reads it as a gridded raster dataset. When its
+points do not form a regular grid, as with accepted soundings, GDAL rejects it, and discovery
+reads 128 windows of 64 KB spread over the file instead, taking the bounding box of the points in
+them and estimating the point count. On the files measured, that bounding box fell short of the
+exact one by under 1% of its extent.
 
 ### ASCII Grid
 
@@ -219,6 +223,11 @@ data (latitude, longitude, timestamp), depth measurements, and quality indicator
 datagram provides position data; `#MRZ` provides depth/reflectivity.
 
 A Python reader module is available on GitHub for parsing datagrams.
+
+Discovery does not read KMALL files whole: it takes the bounding box and the temporal extent from
+16 windows of 256 KB, at both ends of the file and evenly spaced in between. Both ends of a survey
+line are always read, while the extremes of a curved track can be missed by the distance covered
+between two windows.
 
 ### SEG-Y
 

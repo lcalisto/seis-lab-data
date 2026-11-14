@@ -8,7 +8,10 @@ All credit to its author.
 
 """
 
-from asyncio import run, iscoroutinefunction
+from asyncio import (
+    run,
+    iscoroutinefunction,
+)
 from collections import defaultdict
 from functools import wraps
 from typing import Callable

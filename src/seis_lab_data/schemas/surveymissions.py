@@ -3,7 +3,10 @@ from typing import Annotated
 
 import pydantic
 
-from ..constants import SurveyMissionStatus
+from ..constants import (
+    DEFAULT_IMPLICIT_CRS,
+    SurveyMissionStatus,
+)
 from ..db import models
 from .common import (
     ArchivePath,
@@ -29,7 +32,7 @@ class SurveyMissionCreate(pydantic.BaseModel):
     name: DraftName
     description: DraftDescription
     relative_path: ArchivePath
-    implicit_crs: EpsgCode = 4326
+    implicit_crs: EpsgCode = DEFAULT_IMPLICIT_CRS
     bbox_4326: PossiblyInvalidPolygon | None = None
     temporal_extent_begin: dt.date | None = None
     temporal_extent_end: dt.date | None = None

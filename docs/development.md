@@ -21,9 +21,12 @@ The more relevant services are:
 - `interactive-worker` - the [dramatiq] worker that runs the quick, user-facing tasks, such as
   the state-changing DB modifications (create, update, delete, validate, publish). It consumes the
   `default` queue
-- `long-tasks-worker` - the [dramatiq] worker that runs the tasks which may take long: discovery,
-  previews, thumbnails and exports. It consumes the `discovery`, `previews`, `thumbnails` and
-  `exports` queues, so these tasks never delay the interactive ones
+- `long-tasks-worker` - the [dramatiq] worker that runs the tasks which may take long: previews,
+  thumbnails and exports. It consumes the `previews`, `thumbnails` and `exports` queues, so these
+  tasks never delay the interactive ones
+- `discovery-worker` - the [dramatiq] worker that runs archive discoveries, from the `discovery`
+  queue. It runs one process, discovering one mission at a time; set `DISCOVERY_WORKER_PROCESSES`
+  in the environment of `docker compose` to discover several missions in parallel
 - `message-broker` - a [redis] instance that passes messages between the webapp and the workers
 - `web-gateway` - a [traefik] instance that acts as a reverse proxy for the system
 - `auth-webapp` - an [authentik] instance that takes care of user authentication

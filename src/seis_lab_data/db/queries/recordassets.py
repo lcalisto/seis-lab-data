@@ -1,3 +1,6 @@
+import datetime as dt
+from collections.abc import Collection
+
 from sqlalchemy.orm import selectinload
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import (
@@ -77,11 +80,12 @@ async def get_record_asset_by_name(
 async def collect_survey_mission_tracked_file_paths(
     session: AsyncSession,
     survey_mission_id: identifiers.SurveyMissionId,
+    relative_paths: Collection[str],
 ) -> dict[str, tuple[identifiers.SurveyRelatedRecordId, bool]]:
-    """Collect the relative file paths of a survey mission's assets.
+    """Collect the assets of a survey mission located at any of `relative_paths`.
 
-    Returns a mapping of each relative path to the id of the record that holds
-    its asset and to whether that record has a bbox.
+    Returns a mapping of each matching path to the id of its asset's record and a
+    flag set when that record has a bbox.
     """
     statement = (
         select(
@@ -95,7 +99,7 @@ async def collect_survey_mission_tracked_file_paths(
             == models.SurveyRelatedRecord.id,
         )
         .where(models.SurveyRelatedRecord.survey_mission_id == survey_mission_id)
-        .where(models.RecordAsset.relative_path.is_not(None))
+        .where(models.RecordAsset.relative_path.in_(relative_paths))
     )
     return {
         relative_path: (identifiers.SurveyRelatedRecordId(record_id), has_bbox)
@@ -106,8 +110,15 @@ async def collect_survey_mission_tracked_file_paths(
 async def collect_survey_mission_data_asset_paths_without_derived_assets(
     session: AsyncSession,
     survey_mission_id: identifiers.SurveyMissionId,
+    created_before: dt.datetime | None = None,
+    after_record_id: identifiers.SurveyRelatedRecordId | None = None,
+    limit: int | None = None,
 ) -> dict[identifiers.SurveyRelatedRecordId, list[str]]:
     """Collect the data asset paths of a survey mission's records without derived assets.
+
+    Records are collected in id order, at most `limit` of them. When given,
+    `created_before` restricts them to the records created earlier, and
+    `after_record_id` to the records with a greater id.
 
     Returns a mapping of each record id to the relative paths of its data assets.
     Records without data asset paths are left out.
@@ -118,7 +129,7 @@ async def collect_survey_mission_data_asset_paths_without_derived_assets(
     statement = (
         select(
             models.RecordAsset.survey_related_record_id,
-            models.RecordAsset.relative_path,
+            func.array_agg(models.RecordAsset.relative_path),
         )
         .join(
             models.SurveyRelatedRecord,
@@ -133,14 +144,22 @@ async def collect_survey_mission_data_asset_paths_without_derived_assets(
                 records_with_derived_assets
             )
         )
+        .group_by(models.RecordAsset.survey_related_record_id)
         .order_by(models.RecordAsset.survey_related_record_id)
+        .limit(limit)
     )
-    paths_by_record: dict[identifiers.SurveyRelatedRecordId, list[str]] = {}
-    for record_id, relative_path in (await session.exec(statement)).all():
-        paths_by_record.setdefault(
-            identifiers.SurveyRelatedRecordId(record_id), []
-        ).append(relative_path)
-    return paths_by_record
+    if created_before is not None:
+        statement = statement.where(
+            models.SurveyRelatedRecord.created_at < created_before
+        )
+    if after_record_id is not None:
+        statement = statement.where(
+            models.RecordAsset.survey_related_record_id > after_record_id
+        )
+    return {
+        identifiers.SurveyRelatedRecordId(record_id): list(relative_paths)
+        for record_id, relative_paths in (await session.exec(statement)).all()
+    }
 
 
 async def get_record_asset_by_file_path(

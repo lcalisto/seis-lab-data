@@ -6,8 +6,10 @@ import uuid
 from pathlib import Path
 
 import pytest
-from starlette_babel import get_translator, switch_locale
-
+from starlette_babel import (
+    get_translator,
+    switch_locale,
+)
 import seis_lab_data
 from seis_lab_data import (
     constants,

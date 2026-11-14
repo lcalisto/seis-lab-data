@@ -1,6 +1,8 @@
+import datetime as dt
 import logging
 import re
 import uuid
+from collections.abc import AsyncIterator
 
 import shapely
 from anyio import to_thread
@@ -38,37 +40,49 @@ from ..tasks.derivers import (
 logger = logging.getLogger(__name__)
 
 
-async def collect_survey_mission_records_missing_previews(
+async def iter_survey_mission_records_missing_previews(
     session: AsyncSession,
     survey_mission_id: identifiers.SurveyMissionId,
-) -> list[identifiers.SurveyRelatedRecordId]:
-    """Collect the ids of a survey mission's records that are missing previews.
+    created_before: dt.datetime | None = None,
+    page_size: int = constants.PREVIEW_BATCH_SIZE,
+) -> AsyncIterator[list[identifiers.SurveyRelatedRecordId]]:
+    """Yield the ids of a survey mission's records that are missing previews, by page.
 
     These are the records without derived assets that have at least one data asset
-    eligible for a preview, as defined in `generate_record_previews`.
+    eligible for a preview, as defined in `generate_record_previews`, restricted to
+    those created before `created_before` when given. Each page holds the eligible
+    records among `page_size` records without derived assets, so it may be shorter
+    or empty.
     """
     # no permission check, unlike user-facing operations: generation is
     # system-initiated, authorized when the discovery that enqueued it ran
     preview_patterns = await _collect_preview_patterns(session)
-    return [
-        record_id
-        for record_id, relative_paths in (
-            await asset_queries.collect_survey_mission_data_asset_paths_without_derived_assets(
-                session, survey_mission_id
-            )
-        ).items()
-        if any(
-            next(
-                (
-                    generates_previews
-                    for pattern, generates_previews in preview_patterns
-                    if pattern.matches(relative_path)
-                ),
-                False,
-            )
-            for relative_path in relative_paths
+    after_record_id = None
+    while paths_by_record := (
+        await asset_queries.collect_survey_mission_data_asset_paths_without_derived_assets(
+            session,
+            survey_mission_id,
+            created_before=created_before,
+            after_record_id=after_record_id,
+            limit=page_size,
         )
-    ]
+    ):
+        yield [
+            record_id
+            for record_id, relative_paths in paths_by_record.items()
+            if any(
+                next(
+                    (
+                        generates_previews
+                        for pattern, generates_previews in preview_patterns
+                        if pattern.matches(relative_path)
+                    ),
+                    False,
+                )
+                for relative_path in relative_paths
+            )
+        ]
+        after_record_id = next(reversed(paths_by_record))
 
 
 async def _collect_preview_patterns(

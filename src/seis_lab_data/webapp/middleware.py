@@ -5,7 +5,12 @@ from urllib.parse import urlparse
 import httpx
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import (
+    ASGIApp,
+    Receive,
+    Scope,
+    Send,
+)
 
 logger = logging.getLogger(__name__)
 

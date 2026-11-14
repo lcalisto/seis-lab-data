@@ -1,8 +1,10 @@
 import logging
 from pathlib import Path
 
-from osgeo import gdal, osr
-
+from osgeo import (
+    gdal,
+    osr,
+)
 from . import common
 from .schemas import RasterMetadata
 

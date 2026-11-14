@@ -1,7 +1,11 @@
 import logging
+from collections.abc import Collection
 
 import shapely
-from sqlalchemy.orm import aliased, selectinload
+from sqlalchemy.orm import (
+    aliased,
+    selectinload,
+)
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import (
     exists,
@@ -381,6 +385,33 @@ async def get_survey_related_record(
         .options(selectinload(models.SurveyRelatedRecord.subject_links))
     )
     return (await session.exec(statement)).first()
+
+
+async def collect_survey_related_record_validation_fields(
+    session: AsyncSession,
+    survey_related_record_ids: Collection[identifiers.SurveyRelatedRecordId],
+) -> dict[identifiers.SurveyRelatedRecordId, dict]:
+    """Collect the non-spatial validation fields of survey-related records.
+
+    Returns a mapping of record id to fields, keyed by the field names of
+    `ValidSurveyRelatedRecord`. Ids without a record are omitted.
+    """
+    record = models.SurveyRelatedRecord
+    statement = select(
+        record.id,
+        record.name,
+        record.description,
+        record.dataset_category_id,
+        record.workflow_stage_id,
+        record.status,
+        record.links,
+        record.temporal_extent_begin,
+        record.temporal_extent_end,
+    ).where(record.id.in_(survey_related_record_ids))
+    return {
+        identifiers.SurveyRelatedRecordId(row.id): row._asdict()
+        for row in (await session.exec(statement)).all()
+    }
 
 
 async def get_survey_related_record_by_name(

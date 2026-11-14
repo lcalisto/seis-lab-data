@@ -225,8 +225,8 @@ msgid "Implicit CRS"
 msgstr "CRS implícito"
 
 #: webapp/forms/surveymissions.py
-msgid "EPSG code assumed for discovered files that do not declare a coordinate reference system. Leave 4326 unless the survey used another one."
-msgstr "Código EPSG assumido para os ficheiros descobertos que não declaram um sistema de referência de coordenadas. Mantenha 4326, a menos que o levantamento tenha usado outro."
+msgid "EPSG code assumed for discovered files that do not declare a coordinate reference system. Leave 32629 (WGS 84 / UTM zone 29N) unless the survey used another one, e.g. around Madeira or the Azores."
+msgstr "Código EPSG assumido para os ficheiros descobertos que não declaram um sistema de referência de coordenadas. Mantenha 32629 (WGS 84 / UTM zona 29N), a menos que o levantamento tenha usado outro, p. ex. na Madeira ou nos Açores."
 
 #: webapp/epsgcodes.py
 msgid "Enter a numeric EPSG code"

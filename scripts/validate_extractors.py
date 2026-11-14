@@ -6,6 +6,9 @@ file. Pure standard library on purpose: it must run on any python3 (e.g. the
 production server) without installing anything, so it does NOT import the
 seis_lab_data package. The KMALL and SEG-Y parsing below mirrors
 src/seis_lab_data/tasks/extractors/kmall.py and segy.py - keep them in sync.
+Unlike `extract_kmall_metadata`, which reads 16 sampled windows of a file, the
+KMALL validation walks every datagram: its counts, bbox and dates are the exact
+reference the sampled read is checked against.
 The CSV also carries report-only diagnostics (parsed/garbage/accepted counts,
 the units and coordinate-source histograms) that the extractors deliberately do
 not keep: at scale we need the tallies behind a conclusion, not just the

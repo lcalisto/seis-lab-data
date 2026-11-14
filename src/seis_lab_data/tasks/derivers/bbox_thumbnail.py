@@ -3,8 +3,10 @@ from xml.sax.saxutils import escape
 
 import numpy as np
 import pydantic
-from osgeo import gdal, osr
-
+from osgeo import (
+    gdal,
+    osr,
+)
 from . import common
 
 logger = logging.getLogger(__name__)

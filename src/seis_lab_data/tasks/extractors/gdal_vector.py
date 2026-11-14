@@ -1,8 +1,10 @@
 import logging
 from pathlib import Path
 
-from osgeo import gdal, ogr
-
+from osgeo import (
+    gdal,
+    ogr,
+)
 from . import common
 from .schemas import VectorMetadata
 

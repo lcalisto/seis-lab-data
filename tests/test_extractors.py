@@ -9,17 +9,24 @@ import datetime as dt
 import logging
 import math
 import struct
+from pathlib import Path
 
 import pytest
 
 pytest.importorskip("osgeo")
 
-from osgeo import gdal, ogr, osr  # noqa: E402
+from osgeo import (  # noqa: E402
+    gdal,
+    ogr,
+    osr,
+)
 
 from seis_lab_data.tasks.extractors import (  # noqa: E402
     dispatch,
+    kmall,
     schemas,
     segy,
+    xyz,
 )
 from seis_lab_data.tasks.extractors.gdal_raster import (  # noqa: E402
     extract_raster_metadata,
@@ -194,6 +201,128 @@ def test_dispatch_routes_xyz(synthetic_xyz):
     result = dispatch.dispatch_extractor(synthetic_xyz)
     assert isinstance(result, schemas.RasterMetadata)
     assert result.driver == "XYZ"
+
+
+# soundings: irregular x and y, which GDAL's XYZ driver rejects for not being a grid
+_SOUNDINGS = [
+    (10.5, 20.25, 1.0),
+    (13.75, 18.5, 2.0),
+    (11.0, 25.5, 1.5),
+    (9.25, 21.0, 3),
+]
+
+
+def test_dispatch_routes_ungridded_xyz_to_the_point_cloud_extractor(tmp_path):
+    path = tmp_path / "soundings.xyz"
+    path.write_text("".join(f"{x} {y} {z}\n" for x, y, z in _SOUNDINGS))
+
+    result = dispatch.dispatch_extractor(path)
+
+    assert isinstance(result, schemas.PointCloudMetadata)
+    assert result.point_count == 4
+    assert result.bbox_native == (9.25, 18.5, 13.75, 25.5)
+    # no CRS in the file: placed by the survey mission's CRS, as an XYZ grid is
+    assert result.bbox_4326 is None
+    assert result.bbox_native_needing_crs == (9.25, 18.5, 13.75, 25.5)
+
+
+def test_xyz_points_skip_a_header_and_accept_commas(tmp_path):
+    path = tmp_path / "soundings.xyz"
+    path.write_text(
+        "Easting,Northing,Depth\n" + "".join(f"{x},{y},{z}\n" for x, y, z in _SOUNDINGS)
+    )
+
+    result = xyz.extract_xyz_points_metadata(path)
+
+    assert result.point_count == 4
+    assert result.bbox_native == (9.25, 18.5, 13.75, 25.5)
+
+
+def test_xyz_points_of_a_large_file_are_sampled(tmp_path, monkeypatch):
+    monkeypatch.setattr(xyz, "_SAMPLE_WINDOWS", 4)
+    monkeypatch.setattr(xyz, "_SAMPLE_WINDOW_BYTES", 64)
+    # 1000 rows of the same length, x rising along the file: the westernmost and
+    # easternmost points are in the first and last windows, while a southernmost
+    # point in the middle of the file lies between the windows and is missed
+    rows = [
+        f"{1000 + index} {4000 if index == 500 else 5000} 1.0" for index in range(1000)
+    ]
+    path = tmp_path / "soundings.xyz"
+    path.write_text("\n".join(rows))
+    read_sizes = []
+    real_open = Path.open
+
+    def recording_open(self, *args, **kwargs):
+        fh = real_open(self, *args, **kwargs)
+        real_read = fh.read
+
+        def recording_read(size=-1):
+            data = real_read(size)
+            read_sizes.append(len(data))
+            return data
+
+        fh.read = recording_read
+        return fh
+
+    monkeypatch.setattr(Path, "open", recording_open)
+
+    result = xyz.extract_xyz_points_metadata(path)
+
+    assert read_sizes == [64] * 4
+    assert result.bbox_native == (1000.0, 5000.0, 1999.0, 5000.0)
+    assert result.point_count_estimated
+    assert result.point_count == pytest.approx(1000, rel=0.05)
+
+
+def test_xyz_points_of_a_small_file_are_counted(tmp_path):
+    # read whole, its last line without a line break
+    path = tmp_path / "soundings.xyz"
+    path.write_text("\n".join(f"{x} {y} {z}" for x, y, z in _SOUNDINGS))
+
+    result = xyz.extract_xyz_points_metadata(path)
+
+    assert result.point_count == 4
+    assert not result.point_count_estimated
+    assert result.bbox_native == (9.25, 18.5, 13.75, 25.5)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "",
+        "just some text\n",
+        "1 2 3\n4 5\n",
+        "1 2 3\n4 5 deep\n",
+    ],
+    ids=["empty", "no numbers", "ragged rows", "not a number"],
+)
+def test_xyz_points_reject_what_is_not_a_point_cloud(tmp_path, content):
+    path = tmp_path / "soundings.xyz"
+    path.write_text(content)
+
+    with pytest.raises(ValueError):
+        xyz.extract_xyz_points_metadata(path)
+
+
+@pytest.mark.parametrize(
+    "language, estimated, expected",
+    [
+        ("en", False, "Auto-extracted: XYZ point cloud, 4 point(s). CRS:"),
+        ("en", True, "Auto-extracted: XYZ point cloud, about 4 point(s). CRS:"),
+        ("pt", False, "Extração automática: nuvem de pontos XYZ, 4 ponto(s). CRS:"),
+        (
+            "pt",
+            True,
+            "Extração automática: nuvem de pontos XYZ, cerca de 4 ponto(s). CRS:",
+        ),
+    ],
+)
+def test_xyz_points_describe(language, estimated, expected):
+    metadata = schemas.PointCloudMetadata(
+        driver="XYZ", point_count=4, point_count_estimated=estimated
+    )
+
+    assert metadata.describe(language).startswith(expected)
 
 
 def test_dispatch_routes_vector(synthetic_shapefile):
@@ -390,8 +519,7 @@ def test_kmall_metadata_fields(tmp_path):
     assert isinstance(result, schemas.KmallMetadata)
     assert result.driver == "KMALL"
     assert result.echo_sounder_id == 712
-    assert result.datagram_count == 5
-    assert result.position_count == 3
+    assert result.duration_seconds == 86400
     assert result.epsg == 4326
     assert result.bbox_4326 == (-9.3, 40.5, -9.1, 40.7)
     assert result.bbox_native == result.bbox_4326
@@ -405,19 +533,17 @@ def test_kmall_cpo_fallback(tmp_path):
 
     result = extract_kmall_metadata(path)
 
-    assert result.position_count == 2
     assert result.bbox_4326 == (-9.3, 40.5, -9.1, 40.7)
 
 
 def test_kmall_spo_takes_precedence_over_cpo(tmp_path):
     # SPO is the primary source; a divergent CPO feed must be IGNORED, never
-    # merged into the bbox or the fix count
+    # merged into the bbox
     path = tmp_path / "line.kmall"
     _write_kmall(path, [(40.5, -9.3), (40.7, -9.1)], cpo_fixes=[(50.0, 5.0)])
 
     result = extract_kmall_metadata(path)
 
-    assert result.position_count == 2
     assert result.bbox_4326 == (-9.3, 40.5, -9.1, 40.7)
 
 
@@ -449,7 +575,6 @@ def test_kmall_short_position_body_skipped(tmp_path):
 
     result = extract_kmall_metadata(path)
 
-    assert result.position_count == 1
     assert result.bbox_4326 == (-9.2, 40.6, -9.2, 40.6)
 
 
@@ -461,7 +586,6 @@ def test_kmall_without_positions(tmp_path):
 
     assert result.bbox_4326 is None
     assert result.epsg is None
-    assert result.position_count == 0
     assert result.temporal_extent_begin == dt.date(2024, 9, 28)
     assert result.temporal_extent_end == dt.date(2024, 9, 29)
 
@@ -480,7 +604,6 @@ def test_kmall_skips_garbage_fixes(tmp_path):
 
     result = extract_kmall_metadata(path)
 
-    assert result.position_count == 1
     assert result.bbox_4326 == (-9.2, 40.6, -9.2, 40.6)
 
 
@@ -492,8 +615,8 @@ def test_kmall_truncated_tail_garbage(tmp_path):
 
     result = extract_kmall_metadata(path)
 
-    assert result.datagram_count == 3
-    assert result.position_count == 1
+    assert result.bbox_4326 == (-9.3, 40.5, -9.3, 40.5)
+    assert result.temporal_extent_end == dt.date(2024, 9, 29)
 
 
 def test_kmall_truncated_tail_beyond_eof(tmp_path):
@@ -506,8 +629,97 @@ def test_kmall_truncated_tail_beyond_eof(tmp_path):
 
     result = extract_kmall_metadata(path)
 
-    assert result.datagram_count == 3
-    assert result.position_count == 1
+    assert result.bbox_4326 == (-9.3, 40.5, -9.3, 40.5)
+    assert result.temporal_extent_end == dt.date(2024, 9, 29)
+
+
+def _write_sampled_kmall(path, fix_lon, sounding_bytes=30_000, count=200):
+    """A KMALL file larger than the sampled read's windows, one second per datagram.
+
+    Every fourth datagram is a #SPO fix at the longitude `fix_lon(index)` and a
+    latitude rising along the file, the others are soundings whose payload holds
+    `#` bytes and lengths, so that only a validated boundary is taken for one.
+    """
+    filler = (struct.pack("<I4s", 1000, b"#MRZ") + b"x#" * 16) * (sounding_bytes // 40)
+    datagrams = []
+    for index in range(count):
+        if index % 4 == 0:
+            body = _kmall_position_body(40.0 + index * 1e-4, fix_lon(index))
+            datagrams.append(_kmall_datagram(b"#SPO", _KMALL_T0 + index, body))
+        else:
+            datagrams.append(
+                _kmall_datagram(b"#MRZ", _KMALL_T0 + index, filler[:sounding_bytes])
+            )
+    content = b"".join(datagrams)
+    assert len(content) > kmall._SAMPLE_WINDOWS * kmall._SAMPLE_WINDOW_BYTES
+    path.write_bytes(content)
+
+
+def test_kmall_sampled_read_covers_both_ends_and_the_middle(tmp_path):
+    # the easternmost fixes are only in the middle of the file, between the
+    # windows at its ends
+    path = tmp_path / "line.kmall"
+    _write_sampled_kmall(
+        path, lambda index: -9.3 if index < 20 else -9.2 if index >= 180 else -9.0
+    )
+
+    result = extract_kmall_metadata(path)
+
+    west, south, east, north = result.bbox_4326
+    assert (west, east) == (-9.3, -9.0)
+    # the first and last fixes, from the windows at the ends of the file
+    assert south == 40.0
+    assert north == pytest.approx(40.0 + 196 * 1e-4)
+    assert result.duration_seconds == 199
+    assert result.temporal_extent_begin == dt.date(2024, 9, 28)
+
+
+def test_kmall_sampled_read_reads_windows_only(tmp_path, monkeypatch):
+    path = tmp_path / "line.kmall"
+    _write_sampled_kmall(path, lambda index: -9.3)
+    read_sizes = []
+    real_open = Path.open
+
+    def recording_open(self, *args, **kwargs):
+        fh = real_open(self, *args, **kwargs)
+        real_read = fh.read
+
+        def recording_read(size=-1):
+            data = real_read(size)
+            read_sizes.append(len(data))
+            return data
+
+        fh.read = recording_read
+        return fh
+
+    monkeypatch.setattr(Path, "open", recording_open)
+
+    extract_kmall_metadata(path)
+
+    assert read_sizes == [kmall._SAMPLE_WINDOW_BYTES] * kmall._SAMPLE_WINDOWS
+
+
+def test_kmall_sampled_read_survives_a_truncated_tail(tmp_path):
+    path = tmp_path / "line.kmall"
+    _write_sampled_kmall(path, lambda index: -9.3)
+    with path.open("ab") as fh:
+        fh.write(_KMALL_HEADER.pack(99999, b"#MRZ", 0, 0, 712, _KMALL_T0 + 300, 0))
+
+    result = extract_kmall_metadata(path)
+
+    # the tail window yields nothing, the last middle window ends the extent
+    assert result.bbox_4326[0] == -9.3
+    assert 150 < result.duration_seconds < 199
+
+
+def test_kmall_sampled_read_rejects_an_invalid_start(tmp_path):
+    path = tmp_path / "line.kmall"
+    _write_sampled_kmall(path, lambda index: -9.3)
+    content = path.read_bytes()
+    path.write_bytes(b"not a datagram" + content)
+
+    with pytest.raises(ValueError):
+        extract_kmall_metadata(path)
 
 
 def test_kmall_garbage_raises(tmp_path):
@@ -540,22 +752,11 @@ def test_dispatch_routes_kmall(tmp_path):
     assert isinstance(dispatch.dispatch_extractor(path), schemas.KmallMetadata)
 
 
-def test_dispatch_big_kmall_logs(tmp_path, monkeypatch, caplog):
-    path = tmp_path / "line.kmall"
-    _write_kmall(path, [(40.5, -9.3)])
-    monkeypatch.setattr(dispatch, "_BIG_FILE_LOG_BYTES", 0)
-    with caplog.at_level(logging.INFO, logger=dispatch.logger.name):
-        result = dispatch.dispatch_extractor(path)
-    assert isinstance(result, schemas.KmallMetadata)
-    assert any("large KMALL file" in record.message for record in caplog.records)
-
-
 def test_kmall_describe(tmp_path):
     path = tmp_path / "line.kmall"
     _write_kmall(path, [(40.5, -9.3)])
     text = extract_kmall_metadata(path).describe()
-    assert text.startswith("Auto-extracted: Kongsberg KMALL, EM 712")
-    assert "position fix(es)" in text
+    assert text.startswith("Auto-extracted: Kongsberg KMALL, EM 712, 1440 min of data.")
     assert "EPSG:4326" in text
     assert len(text) <= 500
 
@@ -564,8 +765,9 @@ def test_kmall_describe_pt(tmp_path):
     path = tmp_path / "line.kmall"
     _write_kmall(path, [(40.5, -9.3)])
     text = extract_kmall_metadata(path).describe("pt")
-    assert text.startswith("Extração automática: Kongsberg KMALL, EM 712")
-    assert "posição(ões)" in text
+    assert text.startswith(
+        "Extração automática: Kongsberg KMALL, EM 712, 1440 min de dados."
+    )
     assert "EPSG:4326" in text
     assert len(text) <= 500
 

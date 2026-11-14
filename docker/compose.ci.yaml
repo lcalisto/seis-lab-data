@@ -179,9 +179,11 @@ services:
     image: *common-image
     command:
       - "run-worker"
-      - "--queues"
+      - "--queue"
       - "default"
+      - "--queue"
       - "exports"
+      - "--queue"
       - "discovery"
     environment:
       <<: *common-env

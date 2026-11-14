@@ -59,11 +59,11 @@ class _SurveyMissionForm(StarletteForm):
     )
     implicit_crs = EpsgCodeField(
         _("Implicit CRS"),
-        default=4326,
+        default=constants.DEFAULT_IMPLICIT_CRS,
         description=_(
             "EPSG code assumed for discovered files that do not declare a "
-            "coordinate reference system. Leave 4326 unless the survey used "
-            "another one."
+            "coordinate reference system. Leave 32629 (WGS 84 / UTM zone 29N) "
+            "unless the survey used another one, e.g. around Madeira or the Azores."
         ),
         # text, not number, so a CRS name can be typed to search the suggestions
         widget=TextInput(),

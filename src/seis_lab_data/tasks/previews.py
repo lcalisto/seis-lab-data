@@ -1,3 +1,4 @@
+import datetime as dt
 import json
 import logging
 import uuid
@@ -22,64 +23,82 @@ dramatiq.set_broker(sld_stub_broker)
 logger = logging.getLogger(__name__)
 
 
-# Own queue, so slow renders never delay the interactive tasks; a longer time
-# limit, as a whole mission can need more than the 10 minute default;
-# no retries, as the next discovery re-derives whatever is still missing.
+# Own queue, so slow renders never delay the interactive tasks; no retries, as the
+# next discovery re-derives whatever is still missing.
 @dramatiq.actor(queue_name="previews", max_retries=0, time_limit=1_800_000)
 @decorators.sld_settings
 async def generate_mission_previews(
     raw_request_id: str,
     raw_survey_mission_id: str,
     raw_initiator: str,
+    raw_created_before: str | None = None,
     *,
     settings: config.SeisLabDataSettings,
 ) -> None:
     async with settings.get_db_session_maker()() as session:
-        record_ids = await preview_ops.collect_survey_mission_records_missing_previews(
-            session, identifiers.SurveyMissionId(uuid.UUID(raw_survey_mission_id))
-        )
-    for record_id in record_ids:
-        # the same record may already be enqueued by an earlier discovery
-        generate_record_previews.send(
-            raw_request_id=raw_request_id,
-            raw_survey_related_record_id=str(record_id),
-            raw_initiator=raw_initiator,
-            raw_skip_if_derived=True,
-        )
+        async for (
+            record_ids
+        ) in preview_ops.iter_survey_mission_records_missing_previews(
+            session,
+            identifiers.SurveyMissionId(uuid.UUID(raw_survey_mission_id)),
+            created_before=(
+                dt.datetime.fromisoformat(raw_created_before)
+                if raw_created_before is not None
+                else None
+            ),
+        ):
+            if record_ids:
+                # the same records may already be enqueued by an earlier discovery
+                generate_records_previews.send(
+                    raw_request_id=raw_request_id,
+                    raw_survey_related_record_ids=[
+                        str(record_id) for record_id in record_ids
+                    ],
+                    raw_initiator=raw_initiator,
+                    raw_skip_if_derived=True,
+                )
 
 
-# a single record renders in seconds, 10 minutes should work
-@dramatiq.actor(queue_name="previews", max_retries=0, time_limit=600_000)
+# up to `PREVIEW_BATCH_SIZE` records, each rendering in seconds
+@dramatiq.actor(queue_name="previews", max_retries=0, time_limit=3_600_000)
 @decorators.sld_settings
-async def generate_record_previews(
+async def generate_records_previews(
     raw_request_id: str,
-    raw_survey_related_record_id: str,
+    raw_survey_related_record_ids: list[str],
     raw_initiator: str,
     raw_skip_if_derived: bool = False,
     *,
     settings: config.SeisLabDataSettings,
 ) -> None:
-    record_id = identifiers.SurveyRelatedRecordId(
-        uuid.UUID(raw_survey_related_record_id)
-    )
-    async with settings.get_db_session_maker()() as session:
-        if (
-            record := await record_queries.get_survey_related_record(session, record_id)
-        ) is None:
-            logger.warning(
-                f"Survey-related record {record_id} no longer exists - not "
-                f"generating its previews..."
+    initiator = user_schemas.User(**json.loads(raw_initiator))
+    for raw_record_id in raw_survey_related_record_ids:
+        record_id = identifiers.SurveyRelatedRecordId(uuid.UUID(raw_record_id))
+        # a record that fails must not keep the others of its batch from their previews
+        try:
+            async with settings.get_db_session_maker()() as session:
+                if (
+                    record := await record_queries.get_survey_related_record(
+                        session, record_id
+                    )
+                ) is None:
+                    logger.warning(
+                        f"Survey-related record {record_id} no longer exists - not "
+                        f"generating its previews..."
+                    )
+                    continue
+                await preview_ops.generate_record_previews(
+                    request_id=identifiers.RequestId(uuid.UUID(raw_request_id)),
+                    survey_related_record=record,
+                    initiator=initiator,
+                    session=session,
+                    event_dispatcher=settings.get_event_dispatcher(),
+                    settings=settings,
+                    skip_if_derived=raw_skip_if_derived,
+                )
+        except Exception:
+            logger.exception(
+                f"Could not generate the previews of survey-related record {record_id}"
             )
-            return
-        await preview_ops.generate_record_previews(
-            request_id=identifiers.RequestId(uuid.UUID(raw_request_id)),
-            survey_related_record=record,
-            initiator=user_schemas.User(**json.loads(raw_initiator)),
-            session=session,
-            event_dispatcher=settings.get_event_dispatcher(),
-            settings=settings,
-            skip_if_derived=raw_skip_if_derived,
-        )
 
 
 # own queue, so a thumbnail never waits behind the previews of a whole discovery

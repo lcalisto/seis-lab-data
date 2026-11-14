@@ -1,6 +1,9 @@
 import logging
 
-from osgeo import gdal, osr
+from osgeo import (
+    gdal,
+    osr,
+)
 
 logger = logging.getLogger(__name__)
 

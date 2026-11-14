@@ -66,11 +66,7 @@ def setup_broker(settings: config.SeisLabDataSettings | None = None) -> None:
                 redis_dsn=settings.message_broker_dsn.unicode_string()
             )
         )
-        new_broker.add_middleware(
-            AsyncSqlAlchemyDbMiddleware(
-                db_dsn=settings.database_dsn.unicode_string(), debug=settings.debug
-            )
-        )
+        new_broker.add_middleware(AsyncSqlAlchemyDbMiddleware())
         new_broker.add_middleware(StaleGeoNodeExportRecoveryMiddleware())
         new_broker.add_middleware(StaleDiscoveryRecoveryMiddleware())
         old_broker = dramatiq.get_broker()

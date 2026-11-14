@@ -258,7 +258,7 @@ async def test_update_survey_mission(db, db_session_maker, sample_projects):
     )
     async with db_session_maker() as session:
         created = await mission_commands.create_survey_mission(session, to_create)
-        assert created.implicit_crs == 4326
+        assert created.implicit_crs == constants.DEFAULT_IMPLICIT_CRS == 32629
         updated = await mission_commands.update_survey_mission(
             session, created, mission_schemas.SurveyMissionUpdate(implicit_crs=3763)
         )

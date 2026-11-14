@@ -17,7 +17,10 @@ from pydantic import (
     ConfigDict,
     PlainSerializer,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import (
+    ARRAY,
+    JSONB,
+)
 from sqlalchemy import (
     Enum,
     LargeBinary,
@@ -235,7 +238,10 @@ class SurveyMission(SQLModel, table=True):
     links: list[Link] = Field(sa_column=Column(JSONB), default_factory=list)
     relative_path: str = ""
     # fallback EPSG code for discovered files whose format cannot declare a CRS
-    implicit_crs: int = Field(default=4326, sa_column_kwargs={"server_default": "4326"})
+    implicit_crs: int = Field(
+        default=constants.DEFAULT_IMPLICIT_CRS,
+        sa_column_kwargs={"server_default": str(constants.DEFAULT_IMPLICIT_CRS)},
+    )
     status: constants.SurveyMissionStatus = constants.SurveyMissionStatus.DRAFT
     validation_result: ValidationResult = Field(sa_column=Column(JSONB))
     bbox_4326: (

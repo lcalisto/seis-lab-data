@@ -35,7 +35,11 @@ processadas e produtos interpretados.
 
 Formato de nuvem de pontos em texto simples com colunas X, Y, Z. Utilizado como ficheiro
 principal para dados de batimetria em bruto/controlo de qualidade e como ficheiro secundário
-nalgumas fases. O GDAL lê-o como um conjunto de dados raster em grelha.
+nalgumas fases. O GDAL lê-o como um conjunto de dados raster em grelha. Quando os seus pontos
+não formam uma grelha regular, como no caso das sondagens aceites, o GDAL rejeita-o, e a descoberta
+lê em vez disso 128 janelas de 64 KB distribuídas pelo ficheiro, tomando a extensão dos pontos nelas
+contidos e estimando o número de pontos. Nos ficheiros medidos, essa extensão ficou aquém da exata
+em menos de 1% da sua dimensão.
 
 ### ASCII Grid
 
@@ -229,6 +233,11 @@ de qualidade. O datagrama `#SPO` fornece dados de posição; o `#MRZ` fornece
 profundidade/refletividade.
 
 Um módulo Python para leitura de datagramas está disponível no GitHub.
+
+A descoberta não lê os ficheiros KMALL por inteiro: obtém a extensão espacial e a extensão temporal
+de 16 janelas de 256 KB, nas duas pontas do ficheiro e igualmente espaçadas entre elas. As duas
+pontas de uma linha de levantamento são sempre lidas, enquanto os extremos de uma trajetória curva
+podem falhar pela distância percorrida entre duas janelas.
 
 ### SEG-Y
 

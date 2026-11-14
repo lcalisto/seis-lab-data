@@ -2,7 +2,10 @@ import logging
 import logging.config
 import warnings
 from pathlib import Path
-from typing import Optional
+from typing import (
+    Annotated,
+    Optional,
+)
 
 import jinja2
 import sqlmodel
@@ -10,6 +13,10 @@ import yaml
 from pydantic import (
     BaseModel,
     ConfigDict,
+    Field,
+    NonNegativeInt,
+    PositiveFloat,
+    PositiveInt,
 )
 from pydantic.networks import (
     PostgresDsn,
@@ -102,6 +109,12 @@ class SeisLabDataSettings(BaseSettings):
     test_database_dsn: PostgresDsn = PostgresDsn(
         "postgresql+psycopg://sld:sldpass@localhost/seis_lab_data_test"
     )
+    # connections each process keeps open to the database, plus those it may open
+    # temporarily beyond them; a request for a connection fails after waiting
+    # `db_pool_timeout` seconds for one to be free
+    db_pool_size: PositiveInt = 5
+    db_max_overflow: NonNegativeInt = 5
+    db_pool_timeout: PositiveFloat = 30.0
     debug: bool = False
     log_config_file: Path | None = None
     num_web_worker_processes: int = 8
@@ -146,6 +159,17 @@ class SeisLabDataSettings(BaseSettings):
     default_temporal_extent_begin: str = ""
     default_temporal_extent_end: str = ""
     readonly_archive_root_directory: Path = "/mnt/data"
+    # concurrency of a discovery run's metadata extractions, i.e. how many files are
+    # read at once; concurrent extractions overlap their waits on storage and, in
+    # worker processes, use as many CPU cores
+    discovery_extraction_concurrency: PositiveInt = 4
+    # a discovery run looks up matched paths and writes records in batches of up to
+    # this many files, each batch held for at most `discovery_batch_max_seconds`
+    discovery_batch_size: PositiveInt = 500
+    discovery_batch_max_seconds: PositiveFloat = 5.0
+    # a discovery run stops after this long, keeping the records it created; at most
+    # 7 days
+    discovery_time_limit_hours: Annotated[PositiveFloat, Field(le=7 * 24)] = 24.0
     editable_archive_root_directory: Path = "/mnt/sld"
     icons: SeisLabDataIconSettings = SeisLabDataIconSettings()
     target_geonode: TargetGeoNodeSettings | None = None
@@ -156,7 +180,12 @@ class SeisLabDataSettings(BaseSettings):
 
     def get_db_engine(self) -> AsyncEngine:
         if self._db_engine is None:
-            self._db_engine = create_async_engine(self.database_dsn.unicode_string())
+            self._db_engine = create_async_engine(
+                self.database_dsn.unicode_string(),
+                pool_size=self.db_pool_size,
+                max_overflow=self.db_max_overflow,
+                pool_timeout=self.db_pool_timeout,
+            )
         return self._db_engine
 
     def get_sync_db_engine(self) -> Engine:

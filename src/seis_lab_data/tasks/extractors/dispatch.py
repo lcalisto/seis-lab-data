@@ -6,6 +6,7 @@ from .gdal_vector import extract_vector_metadata
 from .kmall import extract_kmall_metadata
 from .schemas import ExtractionResult
 from .segy import extract_segy_metadata
+from .xyz import extract_xyz_points_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -27,38 +28,45 @@ _KMALL_EXTENSIONS = frozenset({".kmall"})
 # the file size, so even a 200 GB file costs a constant number of reads.
 _SEGY_EXTENSIONS = frozenset({".sgy", ".segy"})
 
+_SUPPORTED_EXTENSIONS = (
+    _RASTER_EXTENSIONS | _VECTOR_EXTENSIONS | _KMALL_EXTENSIONS | _SEGY_EXTENSIONS
+)
+
 _BIG_FILE_LOG_BYTES = 1024**3  # log-only threshold; no hard size limit
 
 
 def dispatch_extractor(path: Path | str) -> ExtractionResult | None:
     """Route a file to its metadata extractor by extension.
 
-    Pure sync and potentially slow: GDAL's XYZ driver scans the whole file on open,
-    so a multi-GB grid can take ~1 minute, and KMALL files get a full datagram-header
-    walk (seconds per GB); SEG-Y files stay fast at any size (constant number of
-    header reads). Async callers must run this in a worker thread (e.g.
-    anyio.to_thread.run_sync). Returns None for unsupported extensions and
-    directories.
+    Pure sync and potentially slow, so async callers run it in a worker thread or
+    process: GDAL's XYZ driver scans a whole gridded file on open, so a multi-GB
+    XYZ grid takes about a minute. An XYZ point cloud, which the driver rejects for
+    not being a grid, goes to `extract_xyz_points_metadata`. Point clouds, KMALL
+    and SEG-Y files are sampled, in a constant number of reads whatever their
+    size. Returns None for unsupported extensions and directories, the
+    extension being checked first, as checking a path for a file costs a round
+    trip to network storage.
     """
     p = Path(path)
+    suffix = p.suffix.lower()
+    if suffix not in _SUPPORTED_EXTENSIONS:
+        return None
     if not p.is_file():
         # A real directory named "F3_2022.tif" exists in the archive.
         return None
-    suffix = p.suffix.lower()
     if suffix in _RASTER_EXTENSIONS:
         size = p.stat().st_size
         if size > _BIG_FILE_LOG_BYTES:
             logger.info("Extracting metadata from large raster %s (%d bytes)", p, size)
-        return extract_raster_metadata(p)
+        try:
+            return extract_raster_metadata(p)
+        except RuntimeError:
+            if suffix != ".xyz":
+                raise
+            # the XYZ driver only reads grids, soundings do not form one
+            return extract_xyz_points_metadata(p)
     if suffix in _VECTOR_EXTENSIONS:
         return extract_vector_metadata(p)
     if suffix in _KMALL_EXTENSIONS:
-        size = p.stat().st_size
-        if size > _BIG_FILE_LOG_BYTES:
-            logger.info(
-                "Extracting metadata from large KMALL file %s (%d bytes)", p, size
-            )
         return extract_kmall_metadata(p)
-    if suffix in _SEGY_EXTENSIONS:
-        return extract_segy_metadata(p)
-    return None
+    return extract_segy_metadata(p)

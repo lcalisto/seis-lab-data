@@ -22,8 +22,10 @@ _WORDS: dict[str, dict[str, str]] = {
         "features": "feature(s)",
         "geometry": "geometry",
         "unknown_sounder": "unknown sounder",
-        "datagrams": "datagram(s)",
-        "position_fixes": "position fix(es)",
+        "of_data": "of data",
+        "point_cloud_kind": "{driver} point cloud",
+        "points": "point(s)",
+        "about": "about",
         "traces": "trace(s)",
         "samples_per_trace": "sample(s) per trace",
         "sample_interval": "sample interval {value} (raw)",
@@ -43,8 +45,10 @@ _WORDS: dict[str, dict[str, str]] = {
         "features": "elemento(s)",
         "geometry": "geometria",
         "unknown_sounder": "sonda desconhecida",
-        "datagrams": "datagrama(s)",
-        "position_fixes": "posição(ões)",
+        "of_data": "de dados",
+        "point_cloud_kind": "nuvem de pontos {driver}",
+        "points": "ponto(s)",
+        "about": "cerca de",
         "traces": "traço(s)",
         "samples_per_trace": "amostra(s) por traço",
         "sample_interval": "intervalo de amostragem {value} (bruto)",
@@ -55,6 +59,11 @@ _WORDS: dict[str, dict[str, str]] = {
         "native_bbox": "Extensão nativa",
     },
 }
+
+# the beginnings of the summaries produced by describe(), in every language
+EXTRACTED_SUMMARY_PREFIXES: typing.Final[tuple[str, ...]] = tuple(
+    f"{words['auto_extracted']}: " for words in _WORDS.values()
+)
 
 # The closed set of SEG-Y coordinate-unit labels that translate; "dms" and the
 # dynamic "code N" fallback pass through unchanged. A test pins that every
@@ -169,10 +178,29 @@ class VectorMetadata(ExtractedMetadata):
         return summary[: constants.DESCRIPTION_MAX_LENGTH]
 
 
+class PointCloudMetadata(ExtractedMetadata):
+    point_count: int
+    # estimated from the rows of a sampled read rather than counted
+    point_count_estimated: bool = False
+
+    def describe(self, language: typing.Literal["en", "pt"] = "en") -> str:
+        words = _WORDS[language]
+        crs = _format_crs(self.epsg, self.crs_name, self.crs_from_mission, language)
+        summary = (
+            f"{words['auto_extracted']}: "
+            f"{words['point_cloud_kind'].format(driver=self.driver)}, "
+            + (f"{words['about']} " if self.point_count_estimated else "")
+            + f"{self.point_count} {words['points']}. "
+            f"CRS: {crs}."
+        )
+        summary += _native_bbox_clause(self.bbox_native, language)
+        return summary[: constants.DESCRIPTION_MAX_LENGTH]
+
+
 class KmallMetadata(ExtractedMetadata):
     echo_sounder_id: int | None = None
-    datagram_count: int
-    position_count: int
+    # from the earliest to the latest datagram timestamp read
+    duration_seconds: float | None = None
 
     def describe(self, language: typing.Literal["en", "pt"] = "en") -> str:
         words = _WORDS[language]
@@ -183,10 +211,13 @@ class KmallMetadata(ExtractedMetadata):
         )
         crs = _format_crs(self.epsg, self.crs_name, self.crs_from_mission, language)
         summary = (
-            f"{words['auto_extracted']}: Kongsberg KMALL, {sounder}, "
-            f"{self.datagram_count} {words['datagrams']}, "
-            f"{self.position_count} {words['position_fixes']}. "
-            f"CRS: {crs}."
+            f"{words['auto_extracted']}: Kongsberg KMALL, {sounder}"
+            + (
+                f", {round(self.duration_seconds / 60)} min {words['of_data']}"
+                if self.duration_seconds is not None
+                else ""
+            )
+            + f". CRS: {crs}."
         )
         summary += _native_bbox_clause(self.bbox_native, language)
         return summary[: constants.DESCRIPTION_MAX_LENGTH]
@@ -231,4 +262,6 @@ class SegyMetadata(ExtractedMetadata):
         return summary[: constants.DESCRIPTION_MAX_LENGTH]
 
 
-ExtractionResult = RasterMetadata | VectorMetadata | KmallMetadata | SegyMetadata
+ExtractionResult = (
+    RasterMetadata | PointCloudMetadata | VectorMetadata | KmallMetadata | SegyMetadata
+)

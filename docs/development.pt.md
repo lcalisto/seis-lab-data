@@ -25,7 +25,8 @@ Os serviços mais relevantes são:
 
 - `webapp` – a aplicação web principal, implementada com [starlette], [sqlmodel], [jinja] e [datastar].
 - `interactive-worker` – _worker_ [dramatiq] que executa as tarefas rápidas, iniciadas pelos utilizadores, como as modificações à BD (criar, atualizar, apagar, validar, publicar). Consome a fila `default`.
-- `long-tasks-worker` – _worker_ [dramatiq] que executa as tarefas que podem demorar: descoberta, pré-visualizações, miniaturas e exportações. Consome as filas `discovery`, `previews`, `thumbnails` e `exports`, para que estas tarefas nunca atrasem as interativas.
+- `long-tasks-worker` – _worker_ [dramatiq] que executa as tarefas que podem demorar: pré-visualizações, miniaturas e exportações. Consome as filas `previews`, `thumbnails` e `exports`, para que estas tarefas nunca atrasem as interativas.
+- `discovery-worker` – _worker_ [dramatiq] que executa as descobertas no arquivo, da fila `discovery`. Corre um processo, que descobre uma missão de cada vez; defina `DISCOVERY_WORKER_PROCESSES` no ambiente do `docker compose` para descobrir várias missões em paralelo.
 - `message-broker` – uma instância [redis] que gere a passagem de mensagens entre a webapp e os _workers_.
 - `web-gateway` – uma instância [traefik] que atua como _reverse proxy_ para o sistema.
 - `auth-webapp` – uma instância [authentik] que trata da autenticação de utilizadores.

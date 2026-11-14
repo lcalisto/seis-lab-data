@@ -182,6 +182,7 @@ db                   Up 2 weeks (healthy)
 dozzle               Up 2 weeks
 martin-tile-server   Up 2 weeks (healthy)
 message-broker       Up 2 weeks (healthy)
+discovery-worker     Up 2 weeks
 interactive-worker   Up 2 weeks
 long-tasks-worker    Up 2 weeks
 web-gateway          Up 2 weeks
@@ -212,6 +213,7 @@ Exemplo de resultado:
 /seis-lab-data-dozzle-1 → restart: unless-stopped
 /seis-lab-data-martin-tile-server-1 → restart: unless-stopped
 /seis-lab-data-message-broker-1 → restart: unless-stopped
+/seis-lab-data-discovery-worker-1 → restart: unless-stopped
 /seis-lab-data-interactive-worker-1 → restart: unless-stopped
 /seis-lab-data-long-tasks-worker-1 → restart: unless-stopped
 /seis-lab-data-web-gateway-1 → restart: unless-stopped
@@ -408,7 +410,7 @@ docker compose \
     -f compose.prod-env.yaml \
     --env-file compose-deployment.env \
     --env-file image-url.env \
-    up -d --force-recreate webapp interactive-worker long-tasks-worker
+    up -d --force-recreate webapp interactive-worker long-tasks-worker discovery-worker
 ```
 
 4. Se a nova versão incluir migrações de base de dados, executar após o passo anterior:
@@ -530,16 +532,61 @@ Aplicação [Dramatiq](https://dramatiq.io/) que executa tarefas em segundo plan
 criação e processamento de registos no sistema. Comunica com a aplicação web maioritariamente
 através de um padrão de publicação/subscrição[^2] via a componente `message broker`.
 
-Corre como dois serviços, para que as tarefas que podem demorar nunca atrasem as interativas:
+Corre como três serviços, para que as tarefas que podem demorar nunca atrasem as interativas, e a descoberta no
+arquivo nunca atrase as outras tarefas demoradas:
 
 - `interactive-worker` - executa as tarefas rápidas, iniciadas pelos utilizadores, como criar, atualizar, apagar,
   validar e publicar itens (fila `default`)
-- `long-tasks-worker` - executa as tarefas que podem demorar: descoberta no arquivo, pré-visualizações, miniaturas e
-  exportações para o GeoNode (filas `discovery`, `previews`, `thumbnails` e `exports`)
+- `long-tasks-worker` - executa pré-visualizações, miniaturas e exportações para o GeoNode (filas `previews`,
+  `thumbnails` e `exports`)
+- `discovery-worker` - executa as descobertas no arquivo (fila `discovery`)
 
-O `long-tasks-worker` corre `LONG_TASKS_WORKER_PROCESSES` processos (por omissão 2) de `LONG_TASKS_WORKER_THREADS`
-_threads_ cada (por omissão 4), o que limita quantas das suas tarefas correm em simultâneo. Estas variáveis podem ser
-definidas no ficheiro `compose-deployment.env`.
+O número de processos e de _threads_ de cada serviço limita quantas das suas tarefas correm em simultâneo. Podem ser
+definidos no ficheiro `compose-deployment.env`:
+
+| serviço | processos (por omissão) | _threads_ por processo (por omissão) |
+|---|---|---|
+| `interactive-worker` | `INTERACTIVE_WORKER_PROCESSES` (2) | `INTERACTIVE_WORKER_THREADS` (8) |
+| `long-tasks-worker` | `LONG_TASKS_WORKER_PROCESSES` (2) | `LONG_TASKS_WORKER_THREADS` (4) |
+| `discovery-worker` | `DISCOVERY_WORKER_PROCESSES` (3) | 1 |
+
+Cada processo do `discovery-worker` descobre uma missão de cada vez, pelo que o número de processos é o número de
+missões que podem ser descobertas em paralelo.
+
+Cada descoberta do arquivo lê `DISCOVERY_EXTRACTION_CONCURRENCY` ficheiros em simultâneo (por omissão 4), cada um num
+processo próprio, variável que também pode ser definida no ficheiro `compose-deployment.env`. Ler ficheiros do arquivo
+é em parte esperar pelo armazenamento e em parte trabalho de CPU (p. ex. percorrer os datagramas de um ficheiro
+KMALL), pelo que um valor mais alto acelera a descoberta, à custa de mais carga sobre o armazenamento e o CPU.
+Descobrir várias missões em simultâneo corre até `DISCOVERY_WORKER_PROCESSES` × `DISCOVERY_EXTRACTION_CONCURRENCY`
+destes processos; numa máquina que também corre a base de dados e os outros serviços, mantenha esse número bem abaixo
+do número de núcleos de CPU.
+
+Uma descoberta para ao fim de `DISCOVERY_TIME_LIMIT_HOURS` horas (por omissão 24, no máximo 168), variável que também
+pode ser definida no ficheiro `compose-deployment.env`. Os registos criados até então são mantidos, e correr a
+descoberta de novo retoma-a, pois os ficheiros que já têm registos são ignorados.
+
+A descoberta escreve os seus registos em lotes de até 500 ficheiros, cada um escrito no máximo 5 segundos depois de
+começado. Estes valores raramente precisam de ser alterados; se for o caso, defina
+`SEIS_LAB_DATA__DISCOVERY_BATCH_SIZE` e `SEIS_LAB_DATA__DISCOVERY_BATCH_MAX_SECONDS` no ambiente do serviço
+`discovery-worker` em `compose.prod-env.yaml`. As pré-visualizações dos registos são pedidas à medida que cada lote é
+escrito, pelo que são geradas pelo `long-tasks-worker` enquanto a descoberta ainda decorre. No fim de cada execução, e
+a cada atualização do progresso, o _worker_ regista nos _logs_ onde foi gasto o tempo da execução (percorrer o
+arquivo, extrair metadados e trabalho na base de dados) e as suas extrações mais lentas, o que ajuda a escolher estes
+valores.
+
+##### Ligações à base de dados
+
+Cada processo da `webapp` e dos _workers_ mantém abertas até `SEIS_LAB_DATA__DB_POOL_SIZE` ligações à base de dados
+(por omissão 5), e pode abrir até `SEIS_LAB_DATA__DB_MAX_OVERFLOW` adicionais quando ocupado (por omissão 5). Uma
+tarefa ou pedido que não encontre uma ligação livre espera até `SEIS_LAB_DATA__DB_POOL_TIMEOUT` segundos (por omissão
+30) e depois falha. A base de dados aceita no máximo 200 ligações, conforme definido no `command` do serviço `db` em
+`compose.prod-env.yaml`. Ao alterar o número de processos, verifique que o total se mantém abaixo desse limite:
+
+```
+(processos da webapp + processos de todos os workers) × (DB_POOL_SIZE + DB_MAX_OVERFLOW) + pool do martin + margem
+```
+
+Com os valores por omissão: (8 + 2 + 2 + 3) × (5 + 5) + 20 (martin) = 170, deixando 30 ligações para administração.
 
 [^2]: Visão geral do padrão publicação/subscrição: <https://en.wikipedia.org/wiki/Publish%E2%80%93subscribe_pattern>
 

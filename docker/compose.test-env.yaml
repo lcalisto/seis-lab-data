@@ -159,6 +159,9 @@ services:
 
   db:
     image: postgis/postgis:17-3.5
+    # the default of 100 is below the sum of the connection pools of the webapp,
+    # the workers and martin; see the admin guide for how this is sized
+    command: postgres -c max_connections=200
     environment:
       POSTGRES_DB: seis_lab_data
       POSTGRES_USER: sld
@@ -206,7 +209,12 @@ services:
     image: *common-image
     command:
       - "run-worker"
-      - "--queues"
+      # tasks of this worker are short database operations, so few processes suffice
+      - "--processes"
+      - "${INTERACTIVE_WORKER_PROCESSES:-2}"
+      - "--threads"
+      - "${INTERACTIVE_WORKER_THREADS:-8}"
+      - "--queue"
       - "default"
     volumes:
       *common-volumes
@@ -219,22 +227,44 @@ services:
     image: *common-image
     command:
       - "run-worker"
-      # each thread may hold a GDAL render or a discovery, so they are capped to
+      # each thread may hold a GDAL render or an export, so they are capped to
       # keep memory and database connections in check
       - "--processes"
       - "${LONG_TASKS_WORKER_PROCESSES:-2}"
       - "--threads"
       - "${LONG_TASKS_WORKER_THREADS:-4}"
-      - "--queues"
+      - "--queue"
       - "previews"
+      - "--queue"
       - "thumbnails"
+      - "--queue"
       - "exports"
-      - "discovery"
     volumes:
       *common-volumes
     environment:
       <<: *common-env
       SEIS_LAB_DATA__THUMBNAIL_BASE_TILE_LAYER_URL: http://martin-tile-server:3000/emodnet-bathymetry/{z}/{x}/{y}
+    <<: *common-secrets
+    restart: unless-stopped
+
+  discovery-worker:
+    image: *common-image
+    command:
+      - "run-worker"
+      # one process discovers one mission at a time, using about one CPU core;
+      # a single thread per process keeps two discoveries from sharing that core
+      - "--processes"
+      - "${DISCOVERY_WORKER_PROCESSES:-3}"
+      - "--threads"
+      - "1"
+      - "--queue"
+      - "discovery"
+    volumes:
+      *common-volumes
+    environment:
+      <<: *common-env
+      SEIS_LAB_DATA__DISCOVERY_EXTRACTION_CONCURRENCY: ${DISCOVERY_EXTRACTION_CONCURRENCY:-4}
+      SEIS_LAB_DATA__DISCOVERY_TIME_LIMIT_HOURS: ${DISCOVERY_TIME_LIMIT_HOURS:-24}
     <<: *common-secrets
     restart: unless-stopped
 

@@ -8,10 +8,6 @@ from pathlib import Path
 
 from .schemas import SegyMetadata
 
-# The standalone prod validator scripts/validate_extractors.py re-implements this
-# sampling walk (it cannot import the package). Any change to the header parsing
-# below must be mirrored there, and vice versa.
-
 _TEXTUAL_HEADER_BYTES = 3200
 _BINARY_HEADER_BYTES = 400
 _TRACE_HEADER_BYTES = 240

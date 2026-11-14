@@ -17,7 +17,10 @@ from seis_lab_data.schemas import (
     events as event_schemas,
 )
 from seis_lab_data.schemas.user import User
-from seis_lab_data.schemas.identifiers import UserId, RequestId
+from seis_lab_data.schemas.identifiers import (
+    UserId,
+    RequestId,
+)
 
 
 class _EventCollector:

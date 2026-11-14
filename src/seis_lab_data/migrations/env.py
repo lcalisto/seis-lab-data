@@ -74,6 +74,8 @@ def run_migrations_offline() -> None:
         include_object=alembic_helpers.include_object,
         process_revision_directives=alembic_helpers.writer,
         render_item=alembic_helpers.render_item,
+        # without it, a changed column default goes unnoticed by autogenerate
+        compare_server_default=True,
     )
 
     with context.begin_transaction():
@@ -96,6 +98,8 @@ def run_migrations_online() -> None:
             include_name=include_name,
             process_revision_directives=alembic_helpers.writer,
             render_item=alembic_helpers.render_item,
+            # without it, a changed column default goes unnoticed by autogenerate
+            compare_server_default=True,
         )
         with context.begin_transaction():
             context.run_migrations()
